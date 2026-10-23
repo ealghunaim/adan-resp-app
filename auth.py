@@ -1,0 +1,156 @@
+import time
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort
+from flask_login import login_user, logout_user, login_required, current_user
+
+from models import db, User, ROLE_LABELS, ROLE_REFERRING, ROLE_ADMIN, ROLE_FIRST, ROLE_SECOND, USER_PENDING, USER_APPROVED, USER_DISABLED
+from core import safe_next, audit
+
+auth_bp = Blueprint("auth", __name__)
+_FAILS = {}
+
+
+def _throttled(email):
+    c, t = _FAILS.get(email, (0, 0))
+    if c >= 6 and time.time() - t < 900:
+        return True
+    if time.time() - t >= 900:
+        _FAILS.pop(email, None)
+    return False
+
+
+@auth_bp.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        pw = request.form.get("password", "")
+        if _throttled(email):
+            flash("Too many failed attempts. Try again in 15 minutes.", "error")
+            return render_template("login.html"), 429
+        u = User.query.filter_by(email=email).first()
+        if u and u.check_password(pw):
+            if u.status == USER_PENDING:
+                flash("Your account is waiting for approval.", "warning")
+                return render_template("login.html")
+            if u.status == USER_DISABLED:
+                flash("This account is disabled.", "error")
+                return render_template("login.html")
+            _FAILS.pop(email, None)
+            login_user(u)
+            session["last_active"] = time.time()
+            return redirect(safe_next(request.args.get("next"), url_for("main.dashboard")))
+        c, t = _FAILS.get(email, (0, time.time()))
+        _FAILS[email] = (c + 1, t)
+        flash("Invalid email or password.", "error")
+    return render_template("login.html")
+
+
+@auth_bp.route("/logout")
+def logout():
+    logout_user()
+    session.clear()
+    return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/register", methods=["GET", "POST"])
+def register():
+    """Self sign-up. Every account is pending until approved by the Respirology team."""
+    kind = request.values.get("kind", "referrer")
+    kind = kind if kind in ("referrer", "team") else "referrer"
+    team_roles = [(ROLE_FIRST, ROLE_LABELS[ROLE_FIRST]), (ROLE_SECOND, ROLE_LABELS[ROLE_SECOND])]
+    if request.method == "POST":
+        f = request.form
+        email = f.get("email", "").strip().lower()
+        dept = f.get("department", "").strip()
+        role = ROLE_REFERRING
+        if kind == "team":
+            role = f.get("role")
+            dept = dept or "Respirology"
+        if kind == "team" and role not in dict(team_roles):
+            flash("Choose a valid role.", "error")
+        elif not (f.get("full_name", "").strip() and email and len(f.get("password", "")) >= 8 and dept):
+            flash("Name, department, email and a password of at least 8 characters are required.", "error")
+        elif User.query.filter_by(email=email).first():
+            flash("An account with that email already exists.", "error")
+        else:
+            u = User(full_name=f["full_name"].strip(), email=email, role=role, department=dept,
+                     phone=f.get("phone", "").strip(), status=USER_PENDING)
+            u.set_password(f["password"])
+            db.session.add(u)
+            db.session.commit()
+            flash("Account created. It will be approved by the Respirology team, after which you can log in.", "success")
+            return redirect(url_for("auth.login"))
+    return render_template("register.html", kind=kind, team_roles=team_roles)
+
+
+@auth_bp.route("/password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    if request.method == "POST":
+        if not current_user.check_password(request.form.get("current", "")):
+            flash("Current password is wrong.", "error")
+        elif len(request.form.get("new", "")) < 8:
+            flash("New password must be at least 8 characters.", "error")
+        else:
+            current_user.set_password(request.form["new"])
+            db.session.commit()
+            flash("Password changed.", "success")
+            return redirect(url_for("main.dashboard"))
+    return render_template("password.html")
+
+
+@auth_bp.route("/users")
+@login_required
+def users():
+    if not current_user.can_manage_users:
+        abort(403)
+    return render_template("users.html", users=User.query.order_by(User.status.desc(), User.full_name).all())
+
+
+@auth_bp.route("/users/new", methods=["POST"])
+@login_required
+def user_new():
+    if not current_user.can_manage_users:
+        abort(403)
+    f = request.form
+    email = f.get("email", "").strip().lower()
+    if not (f.get("full_name") and email and len(f.get("password", "")) >= 8 and f.get("role") in ROLE_LABELS):
+        flash("Name, email, role and a password of 8+ characters are required.", "error")
+    elif f.get("role") == ROLE_ADMIN and current_user.role != ROLE_ADMIN:
+        flash("Only an administrator can create administrators.", "error")
+    elif User.query.filter_by(email=email).first():
+        flash("Email already registered.", "error")
+    else:
+        u = User(full_name=f["full_name"].strip(), email=email, role=f["role"], department=f.get("department", "").strip(), status=USER_APPROVED)
+        u.set_password(f["password"])
+        db.session.add(u)
+        audit("user_created", f"{email} as {f['role']}")
+        db.session.commit()
+        flash("Account created.", "success")
+    return redirect(url_for("auth.users"))
+
+
+@auth_bp.route("/users/<int:uid>/update", methods=["POST"])
+@login_required
+def user_update(uid):
+    if not current_user.can_manage_users:
+        abort(403)
+    u = db.session.get(User, uid) or abort(404)
+    action = request.form.get("action")
+    if u.id == current_user.id and action == "disable":
+        flash("You cannot disable your own account.", "error")
+    elif u.role == ROLE_ADMIN and current_user.role != ROLE_ADMIN:
+        flash("Only an administrator can change an administrator.", "error")
+    elif action == "approve" or action == "enable":
+        u.status = USER_APPROVED
+    elif action == "disable":
+        u.status = USER_DISABLED
+    elif action == "role" and request.form.get("role") in ROLE_LABELS:
+        if request.form["role"] == ROLE_ADMIN and current_user.role != ROLE_ADMIN:
+            flash("Only an administrator can grant the administrator role.", "error")
+        else:
+            u.role = request.form["role"]
+    elif action == "reset" and len(request.form.get("password", "")) >= 8:
+        u.set_password(request.form["password"])
+    audit("user_" + str(action), u.email)
+    db.session.commit()
+    return redirect(url_for("auth.users"))

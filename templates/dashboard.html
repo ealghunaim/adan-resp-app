@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% from "_lists.html" import consult_table, referral_table with context %}{% block content %}
+<h1>Respirology - Al-Adan Hospital</h1>
+{% if pending_users %}<div class="flash warning">{{ pending_users }} account(s) waiting for approval - <a href="{{ url_for('auth.users') }}">review</a></div>{% endif %}
+<div class="grid g4" style="margin-bottom:12px"><div class="card stat"><b>{{ first|length }}</b><br>Need 1st on-call</div><div class="card stat"><b>{{ second|length }}</b><br>Need 2nd on-call</div>
+<div class="card stat"><b>{{ to_send|length + ref_send|length }}</b><br>Ready to send</div><div class="card stat"><b>{{ ref_pending|length }}</b><br>Referrals to review</div></div>
+<div class="card"><h2>Consults waiting for 1st on-call (new or returned)</h2>{{ consult_table(first, "None waiting.") }}</div>
+<div class="card"><h2>Consults waiting for 2nd on-call approval</h2>{{ consult_table(second, "None waiting.") }}</div>
+<div class="card"><h2>Approved consults - send to referring physician</h2>{{ consult_table(to_send, "None waiting.") }}</div>
+<div class="card"><h2>Clinic referrals to review</h2>{{ referral_table(ref_pending, "None waiting.") }}</div>
+<div class="card"><h2>Decided referrals - send to referring physician</h2>{{ referral_table(ref_send, "None waiting.") }}</div>{% endblock %}

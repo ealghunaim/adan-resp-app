@@ -1,0 +1,6 @@
+{# expects: kind-specific post url, wa, mailto, print_url, deliveries #}
+<div class="card"><h2>Send back to the referring physician</h2>
+<p>{% if wa %}<a class="btn" href="{{ wa }}" target="_blank" rel="noopener">Open WhatsApp</a>{% endif %} {% if mailto %}<a class="btn sec" href="{{ mailto }}">Open email</a>{% endif %} <a class="btn sec" href="{{ print_url }}" target="_blank">Print</a></p>
+<p class="muted" style="font-size:13px">After sending, record how it was delivered:</p>
+<form method="post" action="{{ sent_url }}" style="display:flex;gap:6px;flex-wrap:wrap">{% for ch in ('whatsapp','email','print') %}<button class="btn sm sec" name="channel" value="{{ ch }}">Sent via {{ ch }}</button>{% endfor %}</form>
+{% if deliveries %}<ul>{% for d in deliveries %}<li>{{ d.channel }} - {{ d.at.strftime('%d-%b-%Y %H:%M') }} UTC - {{ d.by_user.full_name if d.by_user else '' }}</li>{% endfor %}</ul>{% endif %}</div>

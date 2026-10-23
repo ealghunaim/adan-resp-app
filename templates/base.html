@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Respirology{% endblock %} - Al-Adan Hospital</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"></head><body>
+{% if current_user.is_authenticated %}
+<div class="top"><a href="{{ url_for('main.dashboard') }}" class="brand"><span>Al-Adan Respirology</span></a>
+  <a href="{{ url_for('main.dashboard') }}" class="{{ 'on' if request.endpoint=='main.dashboard' }}">Home</a>
+  <a href="{{ url_for('consults.listing') }}">{{ 'Consults' if current_user.is_team else 'My consults' }}</a>
+  <a href="{{ url_for('referrals.listing') }}">{{ 'Clinic referrals' if current_user.is_team else 'My referrals' }}</a>
+  {% if not current_user.is_team %}<a href="{{ url_for('consults.new') }}">New consult</a><a href="{{ url_for('referrals.new') }}">New clinic referral</a>{% endif %}
+  {% if current_user.is_team %}<a href="{{ url_for('main.patients') }}">Patients</a>{% endif %}
+  {% if current_user.can_manage_users %}<a href="{{ url_for('auth.users') }}">Users</a>{% endif %}
+  {% if current_user.role == 'admin' %}<a href="{{ url_for('main.audit_log') }}">Audit</a>{% endif %}
+  <span class="sp"></span>{% if main_app_url and current_user.is_team %}<a class="pill" href="{{ main_app_url }}" target="_blank" rel="noopener">Thoracic Surgery app</a>{% endif %}<span style="font-size:13px;color:#cfe1ec">{{ current_user.full_name }}</span>
+  <a href="{{ url_for('auth.change_password') }}">Password</a><a href="{{ url_for('auth.logout') }}">Sign out</a></div>
+{% endif %}
+<main>
+{% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}
+</main>
+{% if current_user.is_authenticated and idle_seconds %}
+<script>
+(function(){var IDLE={{ idle_seconds }}*1000,WARN=60000,KEY="adanLast",modal=null,last=Date.now(),ping=0;
+function stamp(){last=Date.now();try{localStorage.setItem(KEY,last)}catch(e){}}
+function lastSeen(){var v=0;try{v=parseInt(localStorage.getItem(KEY)||"0",10)}catch(e){}return Math.max(v,last)}
+function keep(){if(Date.now()-ping<120000)return;ping=Date.now();fetch("{{ url_for('keepalive') }}",{method:"POST",credentials:"same-origin"})}
+["mousemove","mousedown","keydown","scroll","touchstart","click"].forEach(function(e){window.addEventListener(e,function(){if(!modal){stamp();keep()}},{passive:true,capture:true})});
+function out(){location.href="{{ url_for('auth.logout') }}"}
+setInterval(function(){var idle=Date.now()-lastSeen();if(idle>=IDLE)return out();
+ if(idle>=IDLE-WARN){if(!modal){modal=document.createElement("div");modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center";
+ modal.innerHTML='<div style="background:#fff;border-radius:12px;padding:22px;max-width:340px;text-align:center"><h2>Still there?</h2><p>For patient privacy you will be signed out in <b id="s"></b> seconds.</p><button class="btn" id="stay">Stay signed in</button> <button class="btn sec" id="so">Sign out</button></div>';
+ document.body.appendChild(modal);document.getElementById("stay").onclick=function(){document.body.removeChild(modal);modal=null;stamp();ping=0;keep()};document.getElementById("so").onclick=out}
+ document.getElementById("s").textContent=Math.ceil((IDLE-idle)/1000)}else if(modal){document.body.removeChild(modal);modal=null}},1000);})();
+</script>
+{% endif %}
+</body></html>

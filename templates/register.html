@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block content %}
+<div class="auth-card card" style="max-width:500px"><h1>{{ 'Referring physician sign-up' if kind=='referrer' else 'Respirology team sign-up' }}</h1>
+<p class="subtitle"><a href="{{ url_for('auth.register', kind='team' if kind=='referrer' else 'referrer') }}">{{ 'I am on the Respirology team' if kind=='referrer' else 'I am a referring physician' }}</a></p>
+<form method="post"><input type="hidden" name="kind" value="{{ kind }}">
+<label>Full name</label><input name="full_name" required>
+{% if kind=='referrer' %}<label>Department / unit at Al-Adan</label><input name="department" required>
+{% else %}<label>Role</label><select name="role" required>{% for k, l in team_roles %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select><input type="hidden" name="department" value="Respirology">{% endif %}
+<label>Email</label><input type="email" name="email" required><label>Phone (used for WhatsApp replies)</label><input name="phone">
+<label>Password (8+ characters)</label><input type="password" name="password" minlength="8" required>
+<p><button class="btn">Create account</button> <a class="btn sec" href="{{ url_for('auth.login') }}">Back to log in</a></p></form></div>{% endblock %}

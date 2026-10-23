@@ -1,0 +1,11 @@
+<div class="card"><h2>Patient</h2><div class="ff">
+<div><label>Civil ID *</label><input name="civil_id" id="civil" value="{{ form.get('civil_id','') }}" required> <button type="button" class="btn sm sec" onclick="lookup()">Find</button> <span id="lk" class="muted"></span></div>
+<div><label>Full name *</label><input name="patient_name" id="patient_name" value="{{ form.get('patient_name','') }}" required></div>
+<div><label>Age</label><input name="age" id="age" value="{{ form.get('age','') }}"></div>
+<div><label>Sex</label><select name="sex" id="sex"><option value=""></option><option {{ 'selected' if form.get('sex')=='Male' }}>Male</option><option {{ 'selected' if form.get('sex')=='Female' }}>Female</option></select></div>
+<div><label>Nationality</label><input name="nationality" id="nationality" value="{{ form.get('nationality','') }}"></div>
+<div><label>Patient phone</label><input name="patient_phone" id="patient_phone" value="{{ form.get('patient_phone','') }}"></div>
+<div><label>MRN / file number</label><input name="mrn" id="mrn" value="{{ form.get('mrn','') }}"></div></div></div>
+<script>function lookup(){var c=document.getElementById('civil').value.trim();if(!c)return;var lk=document.getElementById('lk');lk.textContent='Searching...';
+fetch('{{ url_for("main.lookup") }}?civil_id='+encodeURIComponent(c),{credentials:'same-origin'}).then(r=>r.json()).then(d=>{if(!d.found){lk.textContent='New patient - enter details.';return}
+lk.textContent='Found - details filled in.';['patient_name','age','sex','nationality','patient_phone','mrn'].forEach(k=>{var e=document.getElementById(k);if(e&&d[k])e.value=d[k]})}).catch(()=>lk.textContent='Lookup failed.')}</script>

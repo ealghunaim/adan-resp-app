@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block content %}
+<h1>Consult {{ c.ref_no }} <span class="tag {{ 't-green' if c.status=='completed' else 't-amber' }}">{{ c.status_label }}</span></h1>
+<p class="muted">{{ c.created_at.strftime('%d-%b-%Y %H:%M') }} UTC - <span class="tag {{ 't-red' if c.urgency=='emergent' else ('t-amber' if c.urgency=='urgent' else 't-green') }}">{{ URGENCY[c.urgency] }}</span>
+{% if c.status in ('approved','completed') %} - <a href="{{ url_for('consults.print_view', cid=c.id) }}" target="_blank">Print response</a>{% endif %}</p>
+<div class="card"><h2>Patient</h2><table><tr><td class="muted">Name</td><td>{% if current_user.is_team %}<a href="{{ url_for('main.patient', pid=c.patient_id) }}">{{ c.patient.full_name }}</a>{% else %}{{ c.patient.full_name }}{% endif %}</td><td class="muted">Civil ID</td><td>{{ c.patient.civil_id }}</td></tr>
+<tr><td class="muted">Age / sex</td><td>{{ c.patient.age or '-' }} / {{ c.patient.sex or '-' }}</td><td class="muted">Ward / bed</td><td>{{ c.ward or '-' }} / {{ c.bed or '-' }}</td></tr></table></div>
+<div class="card"><h2>Request</h2><table><tr><td class="muted">Referred by</td><td>{{ c.referring_user.full_name }} - {{ c.referring_department or '' }}</td><td class="muted">Consultant in charge</td><td>{{ c.consultant_in_charge or '-' }}</td></tr>
+<tr><td class="muted">Contact</td><td>{{ c.contact_phone }} {{ c.contact_email or '' }}</td><td></td><td></td></tr></table>
+<p><b>Reason:</b> {{ c.reason }}</p><p style="white-space:pre-wrap">{{ c.clinical_summary }}</p></div>
+
+{% if show_response and (c.assessment or c.recommendations) %}
+<div class="card"><h2>Respirology response</h2>
+<h3>Assessment</h3><p style="white-space:pre-wrap">{{ c.assessment }}</p><h3>Recommendations</h3><p style="white-space:pre-wrap">{{ c.recommendations }}</p>
+{% if c.extra_instructions %}<h3>Additional instructions (consultant)</h3><p style="white-space:pre-wrap">{{ c.extra_instructions }}</p>{% endif %}
+<p class="muted">1st on-call: {{ c.first_by.full_name if c.first_by else '-' }}{% if c.second_by %} - approved by {{ c.second_by.full_name }}{% endif %}</p></div>{% endif %}
+
+{% if current_user.is_team %}
+{% if c.status in ('pending_first','needs_revision') and current_user.can_respond %}
+<div class="card"><h2>{{ 'Revise response' if c.status=='needs_revision' else 'Write response (1st on-call)' }}</h2>
+{% if c.revision_note %}<div class="flash warning">Returned by 2nd on-call: {{ c.revision_note }}</div>{% endif %}
+<form method="post" action="{{ url_for('consults.respond', cid=c.id) }}"><label>Assessment *</label><textarea name="assessment" rows="5" required>{{ c.assessment or '' }}</textarea>
+<label>Recommendations *</label><textarea name="recommendations" rows="6" required>{{ c.recommendations or '' }}</textarea>
+<p><button class="btn">Submit to 2nd on-call</button></p></form></div>{% endif %}
+{% if c.status == 'pending_second' and current_user.can_approve %}
+<div class="card"><h2>2nd on-call review</h2>
+<form method="post" action="{{ url_for('consults.review', cid=c.id) }}"><label>Additional instructions (optional - appended to the response)</label><textarea name="extra_instructions" rows="3">{{ c.extra_instructions or '' }}</textarea>
+<p><button class="btn" name="decision" value="approve">Approve</button></p>
+<hr><label>Or return to 1st on-call - what needs to change?</label><textarea name="revision_note" rows="2"></textarea><p><button class="btn red" name="decision" value="revise">Return for revision</button></p></form></div>{% endif %}
+{% if c.status in ('approved','completed') %}{% set print_url = url_for('consults.print_view', cid=c.id) %}{% set sent_url = url_for('consults.sent', cid=c.id) %}{% set deliveries = c.deliveries %}{% include "_delivery.html" %}{% endif %}
+{% if others %}<div class="card"><h2>Other consults for this patient</h2><table>{% for o in others %}<tr><td><a href="{{ url_for('consults.view', cid=o.id) }}">{{ o.ref_no }}</a></td><td>{{ o.reason }}</td><td>{{ o.created_at.strftime('%d-%b-%Y') }}</td><td>{{ o.status_label }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% elif c.status != 'completed' %}<div class="card"><p class="muted">Your consult is with the Respirology team. The response will be sent to you by WhatsApp/email and will appear here once sent.</p></div>{% endif %}
+{% endblock %}

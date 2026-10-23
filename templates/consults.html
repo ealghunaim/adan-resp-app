@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% from "_lists.html" import consult_table with context %}{% block content %}
+<h1>Consults</h1><form method="get" style="margin-bottom:10px"><select name="status" onchange="this.form.submit()"><option value="">All statuses</option>{% for k, l in CONSULT_STATUS.items() %}<option value="{{ k }}" {{ 'selected' if st==k }}>{{ l }}</option>{% endfor %}</select></form>
+<div class="card">{{ consult_table(rows, "No consults.") }}</div>{% endblock %}

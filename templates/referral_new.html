@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block content %}
+<h1>New Respirology clinic referral</h1><p class="muted">For outpatient clinic appointments. Fields marked * are required.</p>
+<form method="post">{% include "_patient_fields.html" %}
+<div class="card"><h2>Referral</h2><div class="ff">
+<div><label>Your contact phone *</label><input name="contact_phone" value="{{ form.get('contact_phone', current_user.phone or '') }}"></div>
+<div><label>Your email</label><input type="email" name="contact_email" value="{{ form.get('contact_email', current_user.email) }}"></div>
+<div><label>Urgency</label><select name="urgency">{% for k, l in URGENCY.items() %}<option value="{{ k }}" {{ 'selected' if form.get('urgency')==k }}>{{ l }}</option>{% endfor %}</select></div>
+<div class="wide"><label>Reason for referral * (one line)</label><input name="reason" maxlength="300" value="{{ form.get('reason','') }}" required></div>
+<div class="wide"><label>Clinical notes</label><textarea name="clinical_notes" rows="6">{{ form.get('clinical_notes','') }}</textarea></div></div></div>
+<p><button class="btn">Send referral</button></p></form>{% endblock %}

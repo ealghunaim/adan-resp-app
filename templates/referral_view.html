@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block content %}
+<h1>Clinic referral {{ r.ref_no }} <span class="tag {{ 't-green' if r.status in ('approved','completed') else ('t-red' if r.status=='rejected' else 't-amber') }}">{{ r.status_label }}</span></h1>
+<p class="muted">{{ r.created_at.strftime('%d-%b-%Y %H:%M') }} UTC - {{ URGENCY[r.urgency] }}{% if r.status != 'pending' and (current_user.is_team or r.status=='completed') %} - <a href="{{ url_for('referrals.print_view', rid=r.id) }}" target="_blank">Print</a>{% endif %}</p>
+<div class="card"><h2>Patient</h2><p>{% if current_user.is_team %}<a href="{{ url_for('main.patient', pid=r.patient_id) }}">{{ r.patient.full_name }}</a>{% else %}{{ r.patient.full_name }}{% endif %} - Civil ID {{ r.patient.civil_id }} - {{ r.patient.age or '-' }} / {{ r.patient.sex or '-' }}</p>
+<p><b>Referred by:</b> {{ r.referring_user.full_name }} ({{ r.contact_phone }})</p><p><b>Reason:</b> {{ r.reason }}</p><p style="white-space:pre-wrap">{{ r.clinical_notes or '' }}</p></div>
+{% if show and r.status != 'pending' %}<div class="card"><h2>Decision</h2>
+{% if r.status == 'rejected' %}<p>Not accepted. Reason: {{ r.review_notes }}</p>{% else %}<p><b>Appointment:</b> {{ r.appointment_date.strftime('%A %d-%b-%Y') if r.appointment_date }} {{ r.appointment_time or '' }}<br><b>Location:</b> {{ r.appointment_location }}</p>
+{% if r.appointment_instructions %}<p style="white-space:pre-wrap">{{ r.appointment_instructions }}</p>{% endif %}{% endif %}
+<p class="muted">Decided by {{ r.reviewed_by.full_name if r.reviewed_by }}</p></div>{% endif %}
+{% if current_user.is_team %}
+{% if r.status != 'completed' and current_user.can_approve %}
+<div class="card"><h2>{{ 'Review referral' if r.status=='pending' else 'Change decision' }} (2nd on-call)</h2>
+<form method="post" action="{{ url_for('referrals.decide', rid=r.id) }}" class="ff">
+<div><label>Appointment date *</label><input type="date" name="appointment_date" value="{{ r.appointment_date.isoformat() if r.appointment_date }}"></div>
+<div><label>Time</label><input name="appointment_time" value="{{ r.appointment_time or '' }}" placeholder="e.g. 09:00"></div>
+<div class="wide"><label>Location *</label><input name="appointment_location" value="{{ r.appointment_location or 'Al-Adan Hospital - Respirology Clinic' }}"></div>
+<div class="wide"><label>Instructions (bring reports, fasting, etc.)</label><textarea name="appointment_instructions" rows="3">{{ r.appointment_instructions or '' }}</textarea></div>
+<div class="wide"><label>Notes / reason if not accepted</label><textarea name="review_notes" rows="2">{{ r.review_notes or '' }}</textarea></div>
+<div class="wide"><button class="btn" name="decision" value="approve">Approve with appointment</button> <button class="btn red" name="decision" value="reject">Not accepted</button></div></form></div>{% endif %}
+{% if r.status in ('approved','rejected','completed') %}{% set print_url = url_for('referrals.print_view', rid=r.id) %}{% set sent_url = url_for('referrals.sent', rid=r.id) %}{% set deliveries = r.deliveries %}{% include "_delivery.html" %}{% endif %}
+{% endif %}{% endblock %}

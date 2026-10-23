@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Clinic referral {{ r.ref_no }}</title>{% include "_print_css.html" %}</head><body>
+<div class="no-print"><button onclick="window.print()">Print / Save as PDF</button></div>
+<h1>Ministry of Health - Al-Adan Hospital<br>Respirology Clinic Referral {{ 'Reply' }}</h1>
+<table><tr><th>Reference</th><td>{{ r.ref_no }}</td><th>Date</th><td>{{ r.created_at.strftime('%d-%b-%Y') }}</td></tr>
+<tr><th>Patient</th><td>{{ r.patient.full_name }}</td><th>Civil ID</th><td>{{ r.patient.civil_id }}</td></tr>
+<tr><th>Referred by</th><td>{{ r.referring_user.full_name }}</td><th>Urgency</th><td>{{ URGENCY[r.urgency] }}</td></tr></table>
+<h2>Reason for referral</h2><p class="t">{{ r.reason }}</p>
+<h2>Decision</h2>{% if r.status == 'rejected' %}<p class="t"><b>Not accepted.</b> {{ r.review_notes }}</p>{% else %}
+<table><tr><th>Appointment</th><td>{{ r.appointment_date.strftime('%A %d-%b-%Y') if r.appointment_date }} {{ r.appointment_time or '' }}</td></tr><tr><th>Location</th><td>{{ r.appointment_location }}</td></tr></table>
+{% if r.appointment_instructions %}<h2>Instructions</h2><p class="t">{{ r.appointment_instructions }}</p>{% endif %}{% endif %}
+<div class="sig"><div>Decided by: {{ r.reviewed_by.full_name if r.reviewed_by else '' }}<br>{{ r.reviewed_at.strftime('%d-%b-%Y %H:%M') if r.reviewed_at }}</div></div>
+<p class="foot">Confidential patient information. Printed by {{ current_user.full_name }}.</p></body></html>

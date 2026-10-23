@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block content %}<h1>Patients</h1>
+<form method="get" style="margin-bottom:10px"><input name="q" value="{{ q }}" placeholder="Name, Civil ID or MRN" style="max-width:320px"> <button class="btn sm">Search</button></form>
+<div class="card"><table><tr><th>Name</th><th>Civil ID</th><th>Age/sex</th><th>MRN</th></tr>{% for p in rows %}<tr><td><a href="{{ url_for('main.patient', pid=p.id) }}">{{ p.full_name }}</a></td><td>{{ p.civil_id }}</td><td>{{ p.age or '-' }} / {{ p.sex or '-' }}</td><td>{{ p.mrn or '' }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No patients.</td></tr>{% endfor %}</table></div>{% endblock %}

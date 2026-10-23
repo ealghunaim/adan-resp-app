@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block content %}
+<div class="auth-card card"><h1>Al-Adan Hospital - Respirology</h1><p class="subtitle">Consults and clinic referrals - Kuwait Ministry of Health</p>
+<form method="post"><label>Email</label><input type="email" name="email" required autofocus><label>Password</label><input type="password" name="password" required>
+<p><button class="btn">Log in</button></p></form></div>
+<div class="auth-card card" style="margin-top:-30px"><h2>New here?</h2>
+<a class="login-choice" href="{{ url_for('auth.register', kind='referrer') }}"><b>Referring physician</b>Request a Respirology consult or clinic appointment for a patient at Al-Adan Hospital.</a>
+<a class="login-choice" href="{{ url_for('auth.register', kind='team') }}"><b>Respirology team member</b>1st on-call or 2nd on-call (consultant).</a>
+<p class="muted" style="font-size:13px">All new accounts are reviewed and approved by the Respirology team before first sign-in.</p></div>{% endblock %}

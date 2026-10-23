@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% from "_lists.html" import consult_table, referral_table with context %}{% block content %}
+<h1>Welcome, {{ current_user.full_name }}</h1><p class="muted">{{ current_user.department }} - Al-Adan Hospital</p>
+<div class="card"><p><a class="btn" href="{{ url_for('consults.new') }}">New Respirology consult</a> <a class="btn sec" href="{{ url_for('referrals.new') }}">New clinic referral</a></p>
+<p class="muted">Consults are answered by the on-call team and approved by the consultant, then sent to your phone (WhatsApp) or email. Clinic referrals return an appointment.</p></div>
+<div class="card"><h2>My consults</h2>{{ consult_table(consults, "No consults yet.") }}</div>
+<div class="card"><h2>My clinic referrals</h2>{{ referral_table(referrals, "No referrals yet.") }}</div>{% endblock %}
