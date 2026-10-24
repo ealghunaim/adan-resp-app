@@ -8,7 +8,7 @@
   <a href="{{ url_for('consults.listing') }}">{{ 'Consults' if current_user.is_team else 'My consults' }}</a>
   <a href="{{ url_for('referrals.listing') }}">{{ 'Clinic referrals' if current_user.is_team else 'My referrals' }}</a>
   {% if not current_user.is_team %}<a href="{{ url_for('consults.new') }}">New consult</a><a href="{{ url_for('referrals.new') }}">New clinic referral</a>{% endif %}
-  {% if current_user.is_team %}<a href="{{ url_for('main.patients') }}">Patients</a>{% endif %}
+  {% if current_user.is_team %}<a href="{{ url_for('main.today') }}">Today</a><a href="{{ url_for('main.patients') }}">Patients</a>{% endif %}
   {% if current_user.can_manage_users %}<a href="{{ url_for('auth.users') }}">Users</a>{% endif %}
   {% if current_user.role == 'admin' %}<a href="{{ url_for('main.audit_log') }}">Audit</a>{% endif %}
   <span class="sp"></span>{% if main_app_url and current_user.is_team %}<a class="pill" href="{{ main_app_url }}" target="_blank" rel="noopener">Thoracic Surgery app</a>{% endif %}<span style="font-size:13px;color:#cfe1ec">{{ current_user.full_name }}</span>

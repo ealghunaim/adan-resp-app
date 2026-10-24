@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block content %}
 <h1>Clinic referral {{ r.ref_no }} <span class="tag {{ 't-green' if r.status in ('approved','completed') else ('t-red' if r.status=='rejected' else 't-amber') }}">{{ r.status_label }}</span></h1>
 <p class="muted">{{ r.created_at.strftime('%d-%b-%Y %H:%M') }} UTC - {{ URGENCY[r.urgency] }}{% if r.status != 'pending' and (current_user.is_team or r.status=='completed') %} - <a href="{{ url_for('referrals.print_view', rid=r.id) }}" target="_blank">Print</a>{% endif %}</p>
+{% include "_alerts.html" %}
 <div class="card"><h2>Patient</h2><p>{% if current_user.is_team %}<a href="{{ url_for('main.patient', pid=r.patient_id) }}">{{ r.patient.full_name }}</a>{% else %}{{ r.patient.full_name }}{% endif %} - Civil ID {{ r.patient.civil_id }} - {{ r.patient.age or '-' }} / {{ r.patient.sex or '-' }}</p>
 <p><b>Referred by:</b> {{ r.referring_user.full_name }} ({{ r.contact_phone }})</p><p><b>Reason:</b> {{ r.reason }}</p><p style="white-space:pre-wrap">{{ r.clinical_notes or '' }}</p></div>
 {% if show and r.status != 'pending' %}<div class="card"><h2>Decision</h2>

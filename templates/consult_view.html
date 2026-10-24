@@ -2,6 +2,8 @@
 <h1>Consult {{ c.ref_no }} <span class="tag {{ 't-green' if c.status=='completed' else 't-amber' }}">{{ c.status_label }}</span></h1>
 <p class="muted">{{ c.created_at.strftime('%d-%b-%Y %H:%M') }} UTC - <span class="tag {{ 't-red' if c.urgency=='emergent' else ('t-amber' if c.urgency=='urgent' else 't-green') }}">{{ URGENCY[c.urgency] }}</span>
 {% if c.status in ('approved','completed') %} - <a href="{{ url_for('consults.print_view', cid=c.id) }}" target="_blank">Print response</a>{% endif %}</p>
+{% include "_alerts.html" %}
+{% if c.comanage_kind %}<div class="flash warning">Thoracic Surgery {{ 'transfer of care' if c.comanage_kind == 'transfer' else 'co-management' }} requested by {{ c.comanage_by }} on {{ c.comanage_at.strftime('%d-%b-%Y %H:%M') }} UTC{% if c.comanage_note %} - {{ c.comanage_note }}{% endif %}</div>{% endif %}
 <div class="card"><h2>Patient</h2><table><tr><td class="muted">Name</td><td>{% if current_user.is_team %}<a href="{{ url_for('main.patient', pid=c.patient_id) }}">{{ c.patient.full_name }}</a>{% else %}{{ c.patient.full_name }}{% endif %}</td><td class="muted">Civil ID</td><td>{{ c.patient.civil_id }}</td></tr>
 <tr><td class="muted">Age / sex</td><td>{{ c.patient.age or '-' }} / {{ c.patient.sex or '-' }}</td><td class="muted">Ward / bed</td><td>{{ c.ward or '-' }} / {{ c.bed or '-' }}</td></tr></table></div>
 <div class="card"><h2>Request</h2><table><tr><td class="muted">Referred by</td><td>{{ c.referring_user.full_name }} - {{ c.referring_department or '' }}</td><td class="muted">Consultant in charge</td><td>{{ c.consultant_in_charge or '-' }}</td></tr>
@@ -26,6 +28,12 @@
 <form method="post" action="{{ url_for('consults.review', cid=c.id) }}"><label>Additional instructions (optional - appended to the response)</label><textarea name="extra_instructions" rows="3">{{ c.extra_instructions or '' }}</textarea>
 <p><button class="btn" name="decision" value="approve">Approve</button></p>
 <hr><label>Or return to 1st on-call - what needs to change?</label><textarea name="revision_note" rows="2"></textarea><p><button class="btn red" name="decision" value="revise">Return for revision</button></p></form></div>{% endif %}
+{% if current_user.can_respond and c.status != 'completed' %}
+<div class="card"><h2>Needs Thoracic Surgery?</h2>
+<form method="post" action="{{ url_for('consults.comanage', cid=c.id) }}" class="ff">
+<div><label>Request</label><select name="kind"><option value="comanage">Co-management</option><option value="transfer">Transfer of care</option></select></div>
+<div class="wide"><label>Note for the Thoracic team</label><textarea name="note" rows="2" placeholder="Why, and what you need from Thoracic Surgery"></textarea></div>
+<div><button class="btn red" onclick="return confirm('Notify the Thoracic Surgery on-call team now?')">Notify Thoracic Surgery</button></div></form></div>{% endif %}
 {% if c.status in ('approved','completed') %}{% set print_url = url_for('consults.print_view', cid=c.id) %}{% set sent_url = url_for('consults.sent', cid=c.id) %}{% set deliveries = c.deliveries %}{% include "_delivery.html" %}{% endif %}
 {% if others %}<div class="card"><h2>Other consults for this patient</h2><table>{% for o in others %}<tr><td><a href="{{ url_for('consults.view', cid=o.id) }}">{{ o.ref_no }}</a></td><td>{{ o.reason }}</td><td>{{ o.created_at.strftime('%d-%b-%Y') }}</td><td>{{ o.status_label }}</td></tr>{% endfor %}</table></div>{% endif %}
 {% elif c.status != 'completed' %}<div class="card"><p class="muted">Your consult is with the Respirology team. The response will be sent to you by WhatsApp/email and will appear here once sent.</p></div>{% endif %}

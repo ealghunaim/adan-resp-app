@@ -92,3 +92,19 @@ def mailto_link(email, subject, body):
     if not email:
         return ""
     return f"mailto:{email}?subject={quote(subject)}&body={quote(body)}"
+
+
+def portal_alerts(civil_id):
+    """Activity for this Civil ID in the main (Thoracic) app and the Transplant portal, for the warning banner.
+    Best effort: returns [] when not configured or unreachable."""
+    import requests
+    from flask import current_app
+    base, key = current_app.config.get("MAIN_APP_URL"), current_app.config.get("PORTAL_SSO_SECRET")
+    if not (base and key and civil_id):
+        return []
+    try:
+        r = requests.get(base + "/api/portal/patient-activity", params={"civil_id": civil_id, "exclude": "adan"},
+                         headers={"X-Portal-Key": key}, timeout=3)
+        return r.json().get("items", []) if r.status_code == 200 else []
+    except (requests.RequestException, ValueError):
+        return []

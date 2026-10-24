@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% from "_today_tables.html" import ctable, rtable with context %}{% set printing = false %}{% block content %}
+<h1>Today board - {{ today.strftime('%A %d-%b-%Y') }}</h1>
+<p><a class="btn sm" href="{{ url_for('main.today_print') }}" target="_blank">Print handover (A4)</a> <span class="muted">{{ open_total }} open consult(s)</span></p>
+<div class="card"><h2 style="color:#c62828">Urgent / emergent - open</h2>{{ ctable(urgent, "None.") }}</div>
+<div class="card"><h2>Waiting for 1st on-call</h2>{{ ctable(first, "None.") }}</div>
+<div class="card"><h2>Waiting for 2nd on-call approval</h2>{{ ctable(second, "None.") }}</div>
+<div class="card"><h2>Approved - to send</h2>{{ ctable(to_send, "None.") }}</div>
+<div class="card"><h2>Thoracic co-management / transfer requested</h2>{{ ctable(comanage, "None.") }}</div>
+<div class="card"><h2>Clinic today</h2>{{ rtable(clinic_today, "No appointments today.") }}</div>
+<div class="card"><h2>Clinic referrals to review</h2>{{ rtable(ref_pending, "None.") }}</div>
+<div class="card"><h2>Decided referrals - to send</h2>{{ rtable(ref_send, "None.") }}</div>{% endblock %}

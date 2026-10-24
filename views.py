@@ -2,8 +2,9 @@ from flask import Blueprint, render_template, request, abort
 from flask_login import login_required, current_user
 
 from models import (db, Patient, Consult, ClinicReferral, AuditLog, User, USER_PENDING,
-                    C_PENDING_FIRST, C_PENDING_SECOND, C_REVISION, C_APPROVED, R_PENDING, R_APPROVED, R_REJECTED)
-from core import team_required
+                    C_PENDING_FIRST, C_PENDING_SECOND, C_REVISION, C_APPROVED, C_COMPLETED, R_PENDING, R_APPROVED, R_REJECTED, R_COMPLETED)
+from core import team_required, portal_alerts
+from datetime import date
 
 main_bp = Blueprint("main", __name__)
 
@@ -40,7 +41,7 @@ def patients():
 @team_required
 def patient(pid):
     p = db.session.get(Patient, pid) or abort(404)
-    return render_template("patient_detail.html", p=p,
+    return render_template("patient_detail.html", p=p, alerts=portal_alerts(p.civil_id),
                            consults=Consult.query.filter_by(patient_id=p.id).order_by(Consult.created_at.desc()).all(),
                            referrals=ClinicReferral.query.filter_by(patient_id=p.id).order_by(ClinicReferral.created_at.desc()).all())
 
@@ -63,3 +64,35 @@ def audit_log():
     if current_user.role != "admin":
         abort(403)
     return render_template("audit.html", rows=AuditLog.query.order_by(AuditLog.at.desc()).limit(300).all())
+
+
+def _today_data():
+    open_c = Consult.query.filter(Consult.status != C_COMPLETED).all()
+    rank = {"emergent": 0, "urgent": 1, "routine": 2}
+    open_c.sort(key=lambda c: (rank.get(c.urgency, 3), c.created_at))
+    return dict(
+        urgent=[c for c in open_c if c.urgency in ("emergent", "urgent")],
+        first=[c for c in open_c if c.status in (C_PENDING_FIRST, C_REVISION)],
+        second=[c for c in open_c if c.status == C_PENDING_SECOND],
+        to_send=[c for c in open_c if c.status == C_APPROVED],
+        comanage=[c for c in open_c if c.comanage_kind],
+        ref_pending=ClinicReferral.query.filter_by(status=R_PENDING).order_by(ClinicReferral.created_at).all(),
+        ref_send=ClinicReferral.query.filter(ClinicReferral.status.in_([R_APPROVED, R_REJECTED])).order_by(ClinicReferral.created_at).all(),
+        clinic_today=ClinicReferral.query.filter(ClinicReferral.appointment_date == date.today(),
+                                                 ClinicReferral.status.in_([R_APPROVED, R_COMPLETED])).order_by(ClinicReferral.appointment_time).all(),
+        open_total=len(open_c))
+
+
+@main_bp.route("/today")
+@team_required
+def today():
+    return render_template("today.html", **_today_data())
+
+
+@main_bp.route("/today/print")
+@team_required
+def today_print():
+    from core import audit
+    audit("today_board_printed")
+    db.session.commit()
+    return render_template("today_print.html", **_today_data())

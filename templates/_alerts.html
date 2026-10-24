@@ -1,0 +1,5 @@
+{% if alerts %}
+<div style="border:2px solid #c0392b;background:#fdecea;color:#7b1f14;border-radius:8px;padding:10px 14px;margin:10px 0">
+<b>&#9888; This patient is already active elsewhere</b>
+<ul style="margin:6px 0 0 18px">{% for i in alerts %}<li><b>{{ {'ltu': 'Lung Transplant Unit', 'thoracic': 'Thoracic Surgery'}.get(i.portal, i.portal) }}</b> - {{ i.label }}: {{ i.status }}{% if i.detail %} <small>({{ i.detail }})</small>{% endif %}</li>{% endfor %}</ul></div>
+{% endif %}

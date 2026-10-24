@@ -1,8 +1,11 @@
 import time
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort, current_app
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+import secrets
 from flask_login import login_user, logout_user, login_required, current_user
 
-from models import db, User, ROLE_LABELS, ROLE_REFERRING, ROLE_ADMIN, ROLE_FIRST, ROLE_SECOND, USER_PENDING, USER_APPROVED, USER_DISABLED
+from models import (db, User, ROLE_LABELS, ROLE_REFERRING, ROLE_ADMIN, ROLE_FIRST, ROLE_SECOND, ROLE_THORACIC, ROLE_THORACIC_RESP,
+                    SSO_ROLES, USER_PENDING, USER_APPROVED, USER_DISABLED)
 from core import safe_next, audit
 
 auth_bp = Blueprint("auth", __name__)
@@ -154,3 +157,44 @@ def user_update(uid):
     audit("user_" + str(action), u.email)
     db.session.commit()
     return redirect(url_for("auth.users"))
+
+
+_SSO_MAP = {"referring": ROLE_REFERRING, "thoracic": ROLE_THORACIC, "thoracic_resp": ROLE_THORACIC_RESP, "admin": ROLE_ADMIN}
+
+
+@auth_bp.route("/sso")
+def sso():
+    """Single sign-on from the main Thoracic app (signed, 90-second token). Creates the account on first use."""
+    secret = current_app.config.get("PORTAL_SSO_SECRET", "")
+    if not secret:
+        abort(404)
+    try:
+        d = URLSafeTimedSerializer(secret, salt="portal-sso").loads(request.args.get("token", ""), max_age=90)
+    except (BadSignature, SignatureExpired):
+        flash("The sign-in link expired. Open this portal again from the main app.", "error")
+        return redirect(url_for("auth.login"))
+    role, email = _SSO_MAP.get(d.get("role")), (d.get("email") or "").strip().lower()
+    if d.get("portal") != "adan" or not role or not email:
+        abort(400)
+    u = User.query.filter_by(email=email).first()
+    if u is None:
+        u = User(full_name=d.get("name") or email, email=email, role=role, department=d.get("hospital") or "",
+                 phone=d.get("phone") or "", status=USER_APPROVED)
+        u.set_password(secrets.token_urlsafe(24))
+        db.session.add(u)
+    else:
+        if u.status == USER_DISABLED:
+            flash("This account is disabled.", "error")
+            return redirect(url_for("auth.login"))
+        if u.role in SSO_ROLES:      # never downgrade a native admin / Respirology on-call account
+            u.role = role
+        u.status = USER_APPROVED
+        u.full_name = d.get("name") or u.full_name
+        u.phone = d.get("phone") or u.phone
+        if d.get("hospital") and u.role == ROLE_REFERRING:
+            u.department = d["hospital"]
+    audit("sso_login", f"{email} as {u.role}")
+    db.session.commit()
+    login_user(u)
+    session["last_active"] = time.time()
+    return redirect(safe_next(d.get("next"), url_for("main.dashboard")))

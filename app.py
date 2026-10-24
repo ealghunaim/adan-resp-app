@@ -79,8 +79,23 @@ def create_app(config=None):
 
     with app.app_context():
         db.create_all()
+        _ensure_columns()
         _seed(app)
     return app
+
+
+def _ensure_columns():
+    """create_all() never alters existing tables; add columns introduced after first deploy."""
+    from sqlalchemy import inspect, text
+    wanted = {"consults": [("comanage_kind", "VARCHAR(20)"), ("comanage_note", "TEXT"), ("comanage_by", "VARCHAR(200)"),
+                           ("comanage_at", "TIMESTAMP")]}
+    insp = inspect(db.engine)
+    for table, cols in wanted.items():
+        have = {c["name"] for c in insp.get_columns(table)}
+        for name, ddl in cols:
+            if name not in have:
+                db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {ddl}'))
+    db.session.commit()
 
 
 def _seed(app):

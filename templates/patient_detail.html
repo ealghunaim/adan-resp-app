@@ -1,3 +1,4 @@
 {% extends "base.html" %}{% from "_lists.html" import consult_table, referral_table with context %}{% block content %}
 <h1>{{ p.full_name }}</h1><p class="muted">Civil ID {{ p.civil_id }} - {{ p.age or '-' }} / {{ p.sex or '-' }} - {{ p.nationality or '' }} - {{ p.phone or '' }} - MRN {{ p.mrn or '-' }}</p>
+{% include "_alerts.html" %}
 <div class="card"><h2>Consults</h2>{{ consult_table(consults, "None.") }}</div><div class="card"><h2>Clinic referrals</h2>{{ referral_table(referrals, "None.") }}</div>{% endblock %}

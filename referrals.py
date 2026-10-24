@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 
 from models import db, ClinicReferral, Delivery, URGENCY, REFERRAL_STATUS, R_PENDING, R_APPROVED, R_REJECTED, R_COMPLETED
-from core import team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link, parse_date
+from core import team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link, parse_date, portal_alerts
 
 referrals_bp = Blueprint("referrals", __name__, url_prefix="/referrals")
 CHANNELS = ("whatsapp", "email", "print")
@@ -83,7 +83,8 @@ def view(rid):
     if current_user.is_team:
         audit("referral_viewed", r.ref_no)
         db.session.commit()
-    return render_template("referral_view.html", r=r, show=show, wa=wa, mailto=mailto)
+    return render_template("referral_view.html", r=r, show=show, wa=wa, mailto=mailto,
+                           alerts=portal_alerts(r.patient.civil_id) if current_user.is_team else [])
 
 
 @referrals_bp.route("/<int:rid>/decide", methods=["POST"])

@@ -2,12 +2,13 @@
 (or returns / adds instructions) -> sent back by WhatsApp / email / print."""
 from datetime import datetime
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, abort
+import requests
+from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app
 from flask_login import login_required, current_user
 
 from models import (db, Consult, Delivery, URGENCY, CONSULT_STATUS, C_PENDING_FIRST, C_PENDING_SECOND, C_REVISION,
                     C_APPROVED, C_COMPLETED, ROLE_ADMIN)
-from core import team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link
+from core import team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link, portal_alerts
 
 consults_bp = Blueprint("consults", __name__, url_prefix="/consults")
 CHANNELS = ("whatsapp", "email", "print")
@@ -27,6 +28,8 @@ def message_text(c):
         parts += ["RECOMMENDATIONS:", c.recommendations, ""]
     if c.extra_instructions:
         parts += ["ADDITIONAL INSTRUCTIONS (consultant):", c.extra_instructions, ""]
+    if c.comanage_kind:
+        parts += ["THORACIC SURGERY: " + ("transfer of care" if c.comanage_kind == "transfer" else "co-management") + " requested.", ""]
     by = c.second_by.full_name if c.second_by else ""
     parts.append(f"Approved by: {by}" if by else "")
     return "\n".join(parts).strip()
@@ -93,7 +96,8 @@ def view(cid):
         txt = message_text(c)
         wa = wa_link(c.contact_phone, txt)
         mailto = mailto_link(c.contact_email, f"Respirology consult response {c.ref_no}", txt)
-    return render_template("consult_view.html", c=c, show_response=show_response, others=others, wa=wa, mailto=mailto)
+    alerts = portal_alerts(c.patient.civil_id) if current_user.is_team else []
+    return render_template("consult_view.html", c=c, show_response=show_response, others=others, wa=wa, mailto=mailto, alerts=alerts)
 
 
 @consults_bp.route("/<int:cid>/respond", methods=["POST"])
@@ -171,3 +175,37 @@ def print_view(cid):
     audit("consult_printed", c.ref_no)
     db.session.commit()
     return render_template("print_consult.html", c=c, draft=c.status not in (C_APPROVED, C_COMPLETED))
+
+
+@consults_bp.route("/<int:cid>/comanage", methods=["POST"])
+@role_required("can_respond")
+def comanage(cid):
+    """Hot link to Thoracic Surgery: request co-management or transfer of care. Notifies the Thoracic team members
+    the admin has chosen in the main app, and records it on the consult."""
+    c = db.session.get(Consult, cid) or abort(404)
+    kind = request.form.get("kind")
+    if kind not in ("comanage", "transfer"):
+        flash("Choose co-management or transfer of care.", "error")
+        return redirect(url_for("consults.view", cid=c.id))
+    note = request.form.get("note", "").strip()
+    base, key = current_app.config.get("MAIN_APP_URL"), current_app.config.get("PORTAL_SSO_SECRET")
+    if not (base and key):
+        flash("The link to the Thoracic Surgery app is not configured (MAIN_APP_URL / PORTAL_SSO_SECRET).", "error")
+        return redirect(url_for("consults.view", cid=c.id))
+    public = (current_app.config.get("PUBLIC_URL") or request.host_url).rstrip("/")
+    payload = {"source_ref": c.ref_no, "source_path": f"/consults/{c.id}", "civil_id": c.patient.civil_id,
+               "patient_name": c.patient.full_name, "reason": c.reason, "urgency": c.urgency, "kind": kind, "note": note,
+               "requested_by": current_user.full_name, "requested_by_phone": current_user.phone or "", "source_url": public}
+    try:
+        r = requests.post(base + "/api/portal/comanagement", json=payload, headers={"X-Portal-Key": key}, timeout=8)
+        ok = r.status_code == 200 and r.json().get("ok")
+    except (requests.RequestException, ValueError):
+        ok = False
+    if not ok:
+        flash("Could not reach the Thoracic Surgery app. Nothing was sent - please try again or phone the on-call team.", "error")
+        return redirect(url_for("consults.view", cid=c.id))
+    c.comanage_kind, c.comanage_note, c.comanage_by, c.comanage_at = kind, note, current_user.full_name, datetime.utcnow()
+    audit("consult_comanage_requested", f"{c.ref_no} {kind}")
+    db.session.commit()
+    flash("Thoracic Surgery has been notified.", "success")
+    return redirect(url_for("consults.view", cid=c.id))

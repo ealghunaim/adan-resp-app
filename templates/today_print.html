@@ -1,0 +1,12 @@
+{% from "_today_tables.html" import ctable, rtable with context %}{% set printing = true %}<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Respirology handover</title>{% include "_print_css.html" %}</head><body>
+<div class="no-print"><button onclick="window.print()">Print / Save as PDF</button></div>
+<h1>Al-Adan Hospital - Respirology handover<br><small>{{ today.strftime('%A %d-%b-%Y') }}</small></h1>
+<h2>Urgent / emergent - open</h2>{{ ctable(urgent, "None.") }}
+<h2>Waiting for 1st on-call</h2>{{ ctable(first, "None.") }}
+<h2>Waiting for 2nd on-call approval</h2>{{ ctable(second, "None.") }}
+<h2>Approved - to send</h2>{{ ctable(to_send, "None.") }}
+<h2>Thoracic co-management / transfer requested</h2>{{ ctable(comanage, "None.") }}
+<h2>Clinic today</h2>{{ rtable(clinic_today, "None.") }}
+<h2>Clinic referrals to review</h2>{{ rtable(ref_pending, "None.") }}
+<div class="sig"><div>Handed over by</div><div>Received by</div></div>
+<p class="foot">Confidential patient information. Printed by {{ current_user.full_name }}.</p></body></html>

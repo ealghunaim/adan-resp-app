@@ -11,13 +11,18 @@ ROLE_ADMIN = "admin"
 ROLE_FIRST = "first_oncall"
 ROLE_SECOND = "second_oncall"
 ROLE_REFERRING = "referring"
+ROLE_THORACIC = "thoracic"            # Thoracic Surgery on-call from the main app: view-only (single sign-on)
+ROLE_THORACIC_RESP = "thoracic_resp"  # ... admin-granted: may also respond / approve
 ROLE_LABELS = {
     ROLE_ADMIN: "Administrator",
     ROLE_FIRST: "Respirology 1st on-call",
     ROLE_SECOND: "Respirology 2nd on-call (consultant)",
     ROLE_REFERRING: "Referring physician (Al-Adan Hospital)",
+    ROLE_THORACIC: "Thoracic Surgery on-call (view only)",
+    ROLE_THORACIC_RESP: "Thoracic Surgery on-call (may respond/approve)",
 }
-TEAM_ROLES = [ROLE_ADMIN, ROLE_FIRST, ROLE_SECOND]
+TEAM_ROLES = [ROLE_ADMIN, ROLE_FIRST, ROLE_SECOND, ROLE_THORACIC, ROLE_THORACIC_RESP]
+SSO_ROLES = {ROLE_REFERRING, ROLE_THORACIC, ROLE_THORACIC_RESP}   # roles that single sign-on may overwrite
 USER_PENDING, USER_APPROVED, USER_DISABLED = "pending", "approved", "disabled"
 
 
@@ -49,11 +54,11 @@ class User(UserMixin, db.Model):
 
     @property
     def can_respond(self):          # 1st step: draft the consult response
-        return self.role in (ROLE_FIRST, ROLE_SECOND, ROLE_ADMIN)
+        return self.role in (ROLE_FIRST, ROLE_SECOND, ROLE_ADMIN, ROLE_THORACIC_RESP)
 
     @property
     def can_approve(self):          # 2nd step: approve / add instructions / decide referrals
-        return self.role in (ROLE_SECOND, ROLE_ADMIN)
+        return self.role in (ROLE_SECOND, ROLE_ADMIN, ROLE_THORACIC_RESP)
 
     @property
     def can_manage_users(self):
@@ -109,6 +114,11 @@ class Consult(db.Model):
     revision_note = db.Column(db.Text)
     second_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     second_at = db.Column(db.DateTime)
+    # Thoracic Surgery co-management / transfer of care request (2026-10-24)
+    comanage_kind = db.Column(db.String(20))      # comanage | transfer
+    comanage_note = db.Column(db.Text)
+    comanage_by = db.Column(db.String(200))
+    comanage_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

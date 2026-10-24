@@ -28,3 +28,5 @@ class Config:
     ADAN_API_KEY = os.environ.get("ADAN_API_KEY", "")          # shared secret: main app -> this app
     ADAN_ADMIN_EMAIL = os.environ.get("ADAN_ADMIN_EMAIL", "admin@example.com")
     ADAN_ADMIN_PASSWORD = os.environ.get("ADAN_ADMIN_PASSWORD", "")
+    PORTAL_SSO_SECRET = os.environ.get("PORTAL_SSO_SECRET", "")  # same value in the main app and the Transplant app
+    PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
