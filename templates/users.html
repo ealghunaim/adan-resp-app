@@ -6,7 +6,7 @@
 <div><label>Department (optional)</label><input name="department"></div><div><label>Temporary password (8+)</label><input type="password" name="password" minlength="8" required></div>
 <div style="align-self:end"><button class="btn">Create</button></div></form></div>
 <div class="card"><table><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th></th></tr>
-{% for u in users %}<tr><td>{{ u.full_name }}</td><td>{{ u.email }}</td><td>
+{% for u in users %}<tr><td>{{ u.full_name }}<br><a class="btn sm" href="{{ url_for('auth.user_edit', uid=u.id) }}">Edit account</a></td><td>{{ u.email }}</td><td>
 <form method="post" action="{{ url_for('auth.user_update', uid=u.id) }}" style="display:flex;gap:4px"><input type="hidden" name="action" value="role"><select name="role">{% for k, l in ROLE_LABELS.items() %}<option value="{{ k }}" {{ 'selected' if u.role==k }}>{{ l }}</option>{% endfor %}</select><button class="btn sm sec">Set</button></form></td>
 <td>{{ u.department or '' }}</td><td><span class="tag {{ 't-green' if u.status=='approved' else ('t-amber' if u.status=='pending' else 't-red') }}">{{ u.status }}</span></td>
 <td style="white-space:nowrap">{% if u.status=='pending' %}<form method="post" action="{{ url_for('auth.user_update', uid=u.id) }}" style="display:inline"><input type="hidden" name="action" value="approve"><button class="btn sm">Approve</button></form>{% endif %}

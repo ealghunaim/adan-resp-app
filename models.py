@@ -234,6 +234,16 @@ class AuditLog(db.Model):
     user = db.relationship("User")
 
 
+class UserNotice(db.Model):
+    """In-app notice to a user about something an administrator did to their account (shown as a banner until dismissed)."""
+    __tablename__ = "user_notices"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    message = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    seen_at = db.Column(db.DateTime)
+
+
 class AdanDiagnosis(db.Model):
     """Admin-managed diagnosis list used by the retrospective form, the consult diagnosis box and the statistics."""
     __tablename__ = "adan_diagnoses"

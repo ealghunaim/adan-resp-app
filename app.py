@@ -67,7 +67,11 @@ def create_app(config=None):
 
     @app.context_processor
     def _ctx():
-        return dict(ROLE_LABELS=ROLE_LABELS, CONSULT_STATUS=CONSULT_STATUS, REFERRAL_STATUS=REFERRAL_STATUS, URGENCY=URGENCY, OUTCOMES=OUTCOMES, OUTCOME_LABELS=OUTCOME_LABELS,
+        notices = []
+        if current_user.is_authenticated:
+            from models import UserNotice
+            notices = UserNotice.query.filter_by(user_id=current_user.id, seen_at=None).order_by(UserNotice.created_at).all()
+        return dict(my_notices=notices, ROLE_LABELS=ROLE_LABELS, CONSULT_STATUS=CONSULT_STATUS, REFERRAL_STATUS=REFERRAL_STATUS, URGENCY=URGENCY, OUTCOMES=OUTCOMES, OUTCOME_LABELS=OUTCOME_LABELS,
                     idle_seconds=int(app.config["SESSION_IDLE_MINUTES"] * 60), today=date.today(),
                     main_app_url=(app.config.get("MAIN_APP_URL") or ""))
 

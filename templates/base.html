@@ -16,6 +16,7 @@
 {% endif %}
 <main>
 {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
+{% for n in my_notices %}<div class="flash error" style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span><b>Account notice</b> ({{ n.created_at.strftime('%Y-%m-%d %H:%M') }} UTC): {{ n.message }}</span><form method="post" action="{{ url_for('auth.notice_seen', nid=n.id) }}"><button class="btn sm sec">Dismiss</button></form></div>{% endfor %}
 {% block content %}{% endblock %}
 </main>
 {% if current_user.is_authenticated and idle_seconds %}

@@ -159,6 +159,80 @@ def user_update(uid):
     return redirect(url_for("auth.users"))
 
 
+def _notify(u, text):
+    from models import UserNotice
+    db.session.add(UserNotice(user_id=u.id, message=text[:500]))
+
+
+@auth_bp.route("/users/<int:uid>/edit", methods=["GET", "POST"])
+@login_required
+def user_edit(uid):
+    """Admin edits an account. Passwords are stored only as one-way hashes, so they can never be *viewed*;
+    the admin can instead set/generate a new one. Every change is audited and the user gets an on-screen notice."""
+    if not current_user.can_manage_users:
+        abort(403)
+    u = db.session.get(User, uid) or abort(404)
+    if u.role == ROLE_ADMIN and current_user.role != ROLE_ADMIN:
+        abort(403)
+    if request.method == "POST":
+        f = request.form
+        email = f.get("email", "").strip().lower()
+        other = User.query.filter(User.email == email, User.id != u.id).first() if email else None
+        if not (f.get("full_name", "").strip() and email) or other:
+            flash("Name and a unique email are required.", "error")
+            return render_template("user_edit.html", u=u, new_password=None), 400
+        changed = []
+        for attr, val in (("full_name", f["full_name"].strip()), ("email", email), ("department", f.get("department", "").strip()),
+                          ("phone", f.get("phone", "").strip())):
+            if (getattr(u, attr) or "") != val:
+                changed.append(attr.replace("_", " "))
+                setattr(u, attr, val)
+        role = f.get("role")
+        if role in ROLE_LABELS and role != u.role:
+            if role == ROLE_ADMIN and current_user.role != ROLE_ADMIN:
+                flash("Only an administrator can grant the administrator role.", "error")
+            else:
+                u.role = role
+                changed.append("role")
+        if f.get("status") in (USER_APPROVED, USER_DISABLED, USER_PENDING) and f["status"] != u.status and u.id != current_user.id:
+            u.status = f["status"]
+            changed.append("status")
+        new_pw = None
+        if f.get("password_action") == "generate":
+            new_pw = secrets.token_urlsafe(9)
+        elif f.get("password_action") == "set":
+            if len(f.get("password", "")) < 8:
+                flash("Password must be 8+ characters.", "error")
+                return render_template("user_edit.html", u=u, new_password=None), 400
+            new_pw = f["password"]
+        if new_pw:
+            u.set_password(new_pw)
+            changed.append("password (reset)")
+        if changed:
+            who = f"{current_user.full_name} ({ROLE_LABELS.get(current_user.role, current_user.role)})"
+            _notify(u, f"Administrator {who} changed your account: {', '.join(changed)}."
+                       + (" Your password was reset - sign in with the new password you were given." if new_pw else ""))
+            audit("user_edited", f"{u.email}: {', '.join(changed)}")
+        db.session.commit()
+        flash("Account updated." if changed else "No changes.", "success")
+        if new_pw and f.get("password_action") == "generate":
+            return render_template("user_edit.html", u=u, new_password=new_pw)   # shown once, never stored in clear
+        return redirect(url_for("auth.users"))
+    return render_template("user_edit.html", u=u, new_password=None)
+
+
+@auth_bp.route("/notices/<int:nid>/seen", methods=["POST"])
+@login_required
+def notice_seen(nid):
+    from models import UserNotice
+    from datetime import datetime
+    n = db.session.get(UserNotice, nid)
+    if n and n.user_id == current_user.id:
+        n.seen_at = datetime.utcnow()
+        db.session.commit()
+    return redirect(request.referrer or url_for("main.dashboard"))
+
+
 _SSO_MAP = {"referring": ROLE_REFERRING, "thoracic": ROLE_THORACIC, "thoracic_resp": ROLE_THORACIC_RESP, "admin": ROLE_ADMIN}
 
 
