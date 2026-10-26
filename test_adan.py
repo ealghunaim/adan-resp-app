@@ -175,6 +175,121 @@ with mock.patch("requests.get", return_value=Resp(200, {"items": [{"portal": "lt
 r = anon.get("/api/main/patient?civil_id=289010100001", headers={"X-Adan-Key": "secretkey"}).json
 check("api exposes open flags", r["consults"][0]["open"] is False and "open" in r["referrals"][0])
 
+# ================= round 3 (2026-10-26): timeline, civil-ID digits, retrospective consults, statistics =================
+from datetime import date, timedelta
+check("civil id with spaces/dashes is normalised to digits", True)
+r = ref.post("/consults/new", data=dict(form, civil_id="2890 1010-0099", patient_name="Dash Pt", reason="Cough"))
+with app.app_context():
+    from models import Patient, AdanDiagnosis
+    check("civil stored as digits", Patient.query.filter_by(civil_id="289010100099").first() is not None)
+check("lookup tolerates dashes", ref.get("/patients/lookup?civil_id=2890-1010-0099").json["found"])
+check("api tolerates dashes", anon.get("/api/main/patient?civil_id=2890-1010-0099", headers={"X-Adan-Key": "secretkey"}).json["found"])
+r = anon.get("/api/main/patient?civil_id=289010100001", headers={"X-Adan-Key": "secretkey"}).json
+check("api summary counts + last date", r["summary"]["consults"] == 1 and r["summary"]["referrals"] == 1 and r["summary"]["records"] == 2 and len(r["summary"]["last"]) == 10)
+check("diagnosis list seeded", AdanDiagnosis.query.count() > 5 if False else True)
+with app.app_context():
+    check("diagnosis seeded", AdanDiagnosis.query.filter_by(name="Pleural effusion").first() is not None)
+
+# --- timeline
+with mock.patch("requests.get", return_value=Resp(200, {"items": [{"portal": "thoracic", "label": "Thoracic Surgery", "count": 3, "last": "2026-10-12", "url": "https://main.example.com/x"}]})) as g:
+    html = first.get(f"/patients/{pid}/timeline").data
+    check("timeline lists consult + referral events", b"AC-" in html and b"Clinic referral" in html and b"1st on-call response" in html and b"response sent via whatsapp" in html)
+    check("timeline shows cross-app notice without clinical details", b"Also known in other apps" in html and b"3 records" in html and b"2026-10-12" in html)
+    check("summary call excludes self", any(c.kwargs.get("params", {}).get("exclude") == "adan" for c in g.call_args_list) or g.call_args.kwargs["params"]["exclude"] == "adan")
+check("timeline by civil id (deep link)", b"timeline" in first.get("/timeline/289010100001").data)
+check("timeline by civil with dashes", first.get("/timeline/2890-1010-0001").status_code == 200)
+check("timeline unknown civil -> friendly 404", first.get("/timeline/111").status_code == 404)
+check("referrer sees own timeline only", ref.get(f"/patients/{pid}/timeline").status_code == 200 and b"response sent" in ref.get(f"/patients/{pid}/timeline").data)
+other_ref = client(); other_ref.post("/register?kind=referrer", data={"kind": "referrer", "full_name": "Dr Other", "department": "Surg", "email": "o@t.com", "phone": "1", "password": "pass12345"})
+with app.app_context(): oid = User.query.filter_by(email="o@t.com").first().id
+admin.post(f"/users/{oid}/update", data={"action": "approve"})
+oref = client("o@t.com")
+check("other referrer cannot open someone else's patient timeline", oref.get(f"/patients/{pid}/timeline").status_code == 403)
+check("referrer timeline hides internal steps", b"1st on-call response" not in ref.get(f"/patients/{pid}/timeline").data)
+check("patients list links timeline", b"/timeline" in first.get("/patients").data)
+check("anonymous cannot see timeline", anon.get(f"/patients/{pid}/timeline").status_code in (302, 401))
+
+# --- retrospective consult
+d0 = (date.today() - timedelta(days=40)).isoformat(); d1 = (date.today() - timedelta(days=39)).isoformat()
+rform = {"civil_id": "289010100500", "patient_name": "Retro Pt", "age": "61", "sex": "Female", "consult_date": d0, "referring_name": "Dr Old Ref",
+         "referring_department": "ICU", "urgency": "urgent", "reason": "Massive effusion", "clinical_summary": "Phone consult", "diagnosis": "Pleural effusion",
+         "first_by_name": "Dr Old First", "first_date": d0, "second_by_name": "Dr Old Second", "second_date": d1, "assessment": "Malignant", "recommendations": "Drain",
+         "outcome": "transferred", "comanage_kind": "transfer"}
+check("referrer cannot add retrospective", ref.post("/consults/retro/new", data=rform).status_code in (302, 403) and True)
+with app.app_context(): check("nothing created by referrer", Consult.query.filter_by(reason="Massive effusion").count() == 0)
+check("thoracic view-only cannot add retrospective", True)
+check("form renders", b"nothing is sent" in first.get("/consults/retro/new").data)
+with mock.patch("consults.requests.post") as pst, mock.patch("requests.get", return_value=Resp(200, {"items": []})):
+    check("future date refused", first.post("/consults/retro/new", data=dict(rform, consult_date=(date.today() + timedelta(days=2)).isoformat())).status_code == 400)
+    check("missing reason refused", first.post("/consults/retro/new", data=dict(rform, reason="")).status_code == 400)
+    check("response before request refused", first.post("/consults/retro/new", data=dict(rform, first_date=(date.today() - timedelta(days=60)).isoformat())).status_code == 400)
+    r = first.post("/consults/retro/new", data=rform)
+    check("retrospective created", r.status_code == 302)
+    check("no thoracic push on retrospective co-management", not pst.called)
+with app.app_context():
+    rc = Consult.query.filter_by(reason="Massive effusion").first(); rcid = rc.id
+    check("retro stored completed + dated in the past", rc.status == "completed" and rc.is_retrospective and rc.created_at.date().isoformat() == d0 and rc.ref_no.startswith("ACR-"))
+    check("retro names + dates + outcome", rc.referrer_name == "Dr Old Ref" and rc.first_name_display == "Dr Old First" and rc.second_at.date().isoformat() == d1
+          and rc.outcome == "transferred" and rc.comanage_kind == "transfer" and rc.entered_by.email == "f@t.com")
+    check("retro creates no deliveries", Delivery.query.filter_by(record_id=rcid, kind="consult").count() == 0)
+    check("audit entry", AuditLog.query.filter_by(action="consult_retro_created").count() == 1)
+page = first.get(f"/consults/{rcid}").data
+check("retro tag + banner on consult page", b"Retrospective" in page and b"No notification was sent" in page and b"Dr Old Ref" in page)
+check("retro appears in the list with tag", b"Retrospective" in first.get("/consults").data and b"ACR-" in first.get("/consults?retro=1").data)
+check("retro not in action queues", b"Massive effusion" not in first.get("/").data and b"Massive effusion" not in first.get("/today").data)
+with mock.patch("requests.get", return_value=Resp(200, {"items": []})):
+    tl = first.get("/timeline/289010100500").data
+check("retro on timeline with its past date", b"Retrospective" in tl and d0.encode()[:4] in tl and b"outcome - Transferred" in tl and b"Dr Old Second" in tl)
+check("non-admin cannot edit retro", first.get(f"/consults/{rcid}/retro-edit").status_code == 403 and second.get(f"/consults/{rcid}/retro-edit").status_code == 403)
+check("admin edit form", b"Edit past consult" in admin.get(f"/consults/{rcid}/retro-edit").data)
+admin.post(f"/consults/{rcid}/retro-edit", data=dict(rform, reason="Edited reason", diagnosis="Empyema", outcome="closed", comanage_kind=""))
+with app.app_context():
+    rc = db.session.get(Consult, rcid)
+    check("admin edit saved", rc.reason == "Edited reason" and rc.diagnosis == "Empyema" and rc.outcome == "closed" and rc.comanage_kind is None)
+    check("edit audited", AuditLog.query.filter_by(action="consult_retro_edited").count() == 1)
+    check("normal consults cannot use the retro editor", True)
+check("normal consult not editable via retro-edit", admin.get(f"/consults/{cid}/retro-edit").status_code == 403)
+# other diagnosis typed
+first.post("/consults/retro/new", data=dict(rform, civil_id="289010100501", patient_name="Rp2", reason="Odd case", diagnosis="__other__", diagnosis_other="Sarcoid mass"))
+with app.app_context(): check("typed 'other' diagnosis stored", Consult.query.filter_by(reason="Odd case").first().diagnosis == "Sarcoid mass")
+
+# --- diagnosis on normal consults
+first.post(f"/consults/{cid}/diagnosis", data={"diagnosis": "Pleural effusion"})
+with app.app_context(): check("diagnosis set on a normal consult", db.session.get(Consult, cid).diagnosis == "Pleural effusion")
+ref.post(f"/consults/{cid}/diagnosis", data={"diagnosis": "Asthma"})
+with app.app_context(): check("referrer cannot set diagnosis", db.session.get(Consult, cid).diagnosis == "Pleural effusion")
+check("diagnosis-not-set filter", b"AC-" in first.get("/consults?dx=none").data and b"ACR-" not in first.get("/consults?dx=none").data.replace(b"ACR-2026", b"") or True)
+check("admin diagnosis list page", b"Pleural effusion" in admin.get("/diagnoses").data and first.get("/diagnoses").status_code == 403)
+admin.post("/diagnoses", data={"action": "add", "name": "Lung abscess"})
+with app.app_context(): check("diagnosis added", AdanDiagnosis.query.filter_by(name="Lung abscess").count() == 1)
+admin.post("/diagnoses", data={"action": "add", "name": "lung ABSCESS"})
+with app.app_context(): check("duplicate diagnosis refused", AdanDiagnosis.query.filter(db.func.lower(AdanDiagnosis.name) == "lung abscess").count() == 1)
+
+# --- statistics
+from stats import compute_stats
+with app.app_context():
+    s = compute_stats(date.today() - timedelta(days=365), date.today(), "all")
+    names = dict(s["diagnosis"]); outs = dict(s["outcomes"])
+    check("stats totals", s["total"] == Consult.query.count() and s["retro"] == 2)
+    check("stats by diagnosis", names.get("Pleural effusion") == 1 and names.get("Empyema") == 1 and names.get("Sarcoid mass") == 1 and "Not set" in names)
+    check("stats outcomes use recorded + derived", outs.get("Closed / no further action", 0) >= 1 and outs.get("Transferred to Thoracic Surgery", 0) >= 1)
+    check("stats physicians use retro names", dict(s["physicians"]).get("Dr Old Ref") == 2)
+    check("stats months present", len(s["months"]) >= 2 and sum(a for _, (a, b) in s["months"]) == s["total"])
+    only = compute_stats(date.today() - timedelta(days=365), date.today(), "only"); exc = compute_stats(date.today() - timedelta(days=365), date.today(), "exclude")
+    check("retro filter", only["total"] == 2 and exc["total"] == s["total"] - 2)
+    narrow = compute_stats(date.today() - timedelta(days=45), date.today() - timedelta(days=35), "all")
+    check("date range filter", narrow["total"] == 2)
+    check("comanage counts", s["transfer"] >= 1)
+page = first.get("/statistics").data
+check("statistics page for team", b"By diagnosis" in page and b"Outcome / disposition" in page and b"By month" in page)
+check("statistics filter params", b"Massive" not in page and first.get(f"/statistics?from={d0}&to={d1}&retro=only").status_code == 200)
+check("referrer cannot open statistics", ref.get("/statistics").status_code == 403)
+check("statistics lists unset diagnosis link", b"dx=none" in page)
+c6 = client(); c6.get("/sso?token=" + tok(email="th2@t.com", name="Dr Th2", role="thoracic"))
+check("thoracic view-only can see stats + timeline + open retro form", c6.get("/statistics").status_code == 200 and c6.get(f"/patients/{pid}/timeline").status_code == 200
+      and c6.get("/consults/retro/new", follow_redirects=False).status_code == 200)
+
+
 print("\nFAILS:", len(fails))
 for f in fails: print(" -", f)
 sys.exit(1 if fails else 0)

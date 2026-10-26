@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block content %}
+<h1>{{ 'Edit past consult ' + c.ref_no if c else 'Add a past consult (retrospective)' }}</h1>
+<p class="muted">Enter a consult that was handled earlier (phone, paper, WhatsApp). It is saved as completed and <b>nothing is sent</b> to anyone. Fields marked * are required.</p>
+<form method="post">{% include "_patient_fields.html" %}
+<div class="card"><h2>Request</h2><div class="ff">
+<div><label>Date consult was requested *</label><input type="date" name="consult_date" max="{{ today.isoformat() }}" value="{{ form.get('consult_date','') }}" required></div>
+<div><label>Referring physician</label><input name="referring_name" value="{{ form.get('referring_name','') }}"></div>
+<div><label>Referring department / unit</label><input name="referring_department" value="{{ form.get('referring_department','') }}"></div>
+<div><label>Consultant in charge</label><input name="consultant_in_charge" value="{{ form.get('consultant_in_charge','') }}"></div>
+<div><label>Ward</label><input name="ward" value="{{ form.get('ward','') }}"></div><div><label>Bed</label><input name="bed" value="{{ form.get('bed','') }}"></div>
+<div><label>Urgency</label><select name="urgency">{% for k, l in URGENCY.items() %}<option value="{{ k }}" {{ 'selected' if form.get('urgency')==k }}>{{ l }}</option>{% endfor %}</select></div>
+<div><label>Diagnosis</label><select name="diagnosis" onchange="document.getElementById('dxo').style.display=this.value=='__other__'?'block':'none'"><option value="">- not set -</option>{% for d in diagnoses %}<option {{ 'selected' if form.get('diagnosis')==d }}>{{ d }}</option>{% endfor %}<option value="__other__" {{ 'selected' if form.get('diagnosis')=='__other__' }}>Other (type)...</option></select>
+<input id="dxo" name="diagnosis_other" placeholder="Diagnosis" value="{{ form.get('diagnosis_other','') }}" style="display:{{ 'block' if form.get('diagnosis')=='__other__' else 'none' }};margin-top:4px"></div>
+<div class="wide"><label>Reason for consult * (one line)</label><input name="reason" maxlength="300" value="{{ form.get('reason','') }}" required></div>
+<div class="wide"><label>Clinical summary</label><textarea name="clinical_summary" rows="5">{{ form.get('clinical_summary','') }}</textarea></div></div></div>
+<div class="card"><h2>Respirology response</h2><div class="ff">
+<div><label>1st on-call (name)</label><input name="first_by_name" value="{{ form.get('first_by_name','') }}"></div>
+<div><label>1st response date</label><input type="date" name="first_date" max="{{ today.isoformat() }}" value="{{ form.get('first_date','') }}"></div>
+<div><label>2nd on-call / approved by (name)</label><input name="second_by_name" value="{{ form.get('second_by_name','') }}"></div>
+<div><label>Approval date</label><input type="date" name="second_date" max="{{ today.isoformat() }}" value="{{ form.get('second_date','') }}"></div>
+<div class="wide"><label>Assessment</label><textarea name="assessment" rows="4">{{ form.get('assessment','') }}</textarea></div>
+<div class="wide"><label>Recommendations</label><textarea name="recommendations" rows="4">{{ form.get('recommendations','') }}</textarea></div>
+<div class="wide"><label>Additional instructions (consultant)</label><textarea name="extra_instructions" rows="2">{{ form.get('extra_instructions','') }}</textarea></div>
+<div><label>Outcome / disposition</label><select name="outcome"><option value="">- not set -</option>{% for k, l in OUTCOMES.items() %}<option value="{{ k }}" {{ 'selected' if form.get('outcome')==k }}>{{ l }}</option>{% endfor %}</select></div>
+<div><label>Thoracic Surgery involvement (record only)</label><select name="comanage_kind"><option value="">None</option><option value="comanage" {{ 'selected' if form.get('comanage_kind')=='comanage' }}>Co-management</option><option value="transfer" {{ 'selected' if form.get('comanage_kind')=='transfer' }}>Transfer of care</option></select></div></div></div>
+<p><button class="btn">{{ 'Save changes' if c else 'Save past consult' }}</button> <a class="btn sec" href="{{ url_for('consults.listing') }}">Cancel</a></p></form>{% endblock %}

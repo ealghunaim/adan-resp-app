@@ -1,20 +1,24 @@
 {% extends "base.html" %}{% block content %}
-<h1>Consult {{ c.ref_no }} <span class="tag {{ 't-green' if c.status=='completed' else 't-amber' }}">{{ c.status_label }}</span></h1>
+<h1>Consult {{ c.ref_no }} <span class="tag {{ 't-green' if c.status=='completed' else 't-amber' }}">{{ c.status_label }}</span>{% if c.is_retrospective %} <span class="tag t-amber">Retrospective</span>{% endif %}</h1>
 <p class="muted">{{ c.created_at.strftime('%d-%b-%Y %H:%M') }} UTC - <span class="tag {{ 't-red' if c.urgency=='emergent' else ('t-amber' if c.urgency=='urgent' else 't-green') }}">{{ URGENCY[c.urgency] }}</span>
-{% if c.status in ('approved','completed') %} - <a href="{{ url_for('consults.print_view', cid=c.id) }}" target="_blank">Print response</a>{% endif %}</p>
+{% if c.status in ('approved','completed') %} - <a href="{{ url_for('consults.print_view', cid=c.id) }}" target="_blank">Print response</a>{% endif %}
+ - <a href="{{ url_for('main.timeline', pid=c.patient_id) }}">Patient timeline</a>{% if c.is_retrospective and current_user.role == 'admin' %} - <a href="{{ url_for('consults.retro_edit', cid=c.id) }}">Edit (admin)</a>{% endif %}</p>
+{% if c.is_retrospective %}<div class="flash warning">Entered retrospectively by {{ c.entered_by.full_name if c.entered_by else '-' }} on {{ c.entered_at.strftime('%d-%b-%Y') if c.entered_at }} for a consult dated {{ c.created_at.strftime('%d-%b-%Y') }}. No notification was sent.</div>{% endif %}
 {% include "_alerts.html" %}
 {% if c.comanage_kind %}<div class="flash warning">Thoracic Surgery {{ 'transfer of care' if c.comanage_kind == 'transfer' else 'co-management' }} requested by {{ c.comanage_by }} on {{ c.comanage_at.strftime('%d-%b-%Y %H:%M') }} UTC{% if c.comanage_note %} - {{ c.comanage_note }}{% endif %}</div>{% endif %}
 <div class="card"><h2>Patient</h2><table><tr><td class="muted">Name</td><td>{% if current_user.is_team %}<a href="{{ url_for('main.patient', pid=c.patient_id) }}">{{ c.patient.full_name }}</a>{% else %}{{ c.patient.full_name }}{% endif %}</td><td class="muted">Civil ID</td><td>{{ c.patient.civil_id }}</td></tr>
 <tr><td class="muted">Age / sex</td><td>{{ c.patient.age or '-' }} / {{ c.patient.sex or '-' }}</td><td class="muted">Ward / bed</td><td>{{ c.ward or '-' }} / {{ c.bed or '-' }}</td></tr></table></div>
-<div class="card"><h2>Request</h2><table><tr><td class="muted">Referred by</td><td>{{ c.referring_user.full_name }} - {{ c.referring_department or '' }}</td><td class="muted">Consultant in charge</td><td>{{ c.consultant_in_charge or '-' }}</td></tr>
+<div class="card"><h2>Request</h2><table><tr><td class="muted">Referred by</td><td>{{ c.referrer_name }} - {{ c.referring_department or '' }}</td><td class="muted">Consultant in charge</td><td>{{ c.consultant_in_charge or '-' }}</td></tr>
 <tr><td class="muted">Contact</td><td>{{ c.contact_phone }} {{ c.contact_email or '' }}</td><td></td><td></td></tr></table>
+{% if current_user.is_team %}<form method="post" action="{{ url_for('consults.set_diagnosis', cid=c.id) }}" class="noprint" style="margin:6px 0"><b>Diagnosis:</b>
+{% if current_user.can_respond %}<select name="diagnosis" style="width:auto" onchange="this.nextElementSibling.style.display=this.value=='__other__'?'inline-block':'none'"><option value="">- not set -</option>{% for d in diagnoses %}<option {{ 'selected' if c.diagnosis==d }}>{{ d }}</option>{% endfor %}<option value="__other__">Other (type)...</option></select><input name="diagnosis_other" placeholder="Diagnosis" style="width:200px;display:none"> <button class="btn sm sec">Save</button>{% else %}{{ c.diagnosis or 'not set' }}{% endif %}</form>{% endif %}
 <p><b>Reason:</b> {{ c.reason }}</p><p style="white-space:pre-wrap">{{ c.clinical_summary }}</p></div>
 
 {% if show_response and (c.assessment or c.recommendations) %}
 <div class="card"><h2>Respirology response</h2>
 <h3>Assessment</h3><p style="white-space:pre-wrap">{{ c.assessment }}</p><h3>Recommendations</h3><p style="white-space:pre-wrap">{{ c.recommendations }}</p>
 {% if c.extra_instructions %}<h3>Additional instructions (consultant)</h3><p style="white-space:pre-wrap">{{ c.extra_instructions }}</p>{% endif %}
-<p class="muted">1st on-call: {{ c.first_by.full_name if c.first_by else '-' }}{% if c.second_by %} - approved by {{ c.second_by.full_name }}{% endif %}</p></div>{% endif %}
+<p class="muted">1st on-call: {{ c.first_name_display or '-' }}{% if c.second_name_display %} - approved by {{ c.second_name_display }}{% endif %}</p></div>{% endif %}
 
 {% if current_user.is_team %}
 {% if c.status in ('pending_first','needs_revision') and current_user.can_respond %}

@@ -1,6 +1,6 @@
 {% macro consult_table(rows, empty="Nothing here.") %}
 <table><tr><th>Ref</th><th>Patient</th><th>Reason</th><th>Urgency</th><th>Date</th><th>Status</th></tr>
-{% for c in rows %}<tr><td><a href="{{ url_for('consults.view', cid=c.id) }}">{{ c.ref_no }}</a></td><td>{{ c.patient.full_name }}<br><small class="muted">{{ c.patient.civil_id }}</small></td><td>{{ c.reason }}</td>
+{% for c in rows %}<tr><td><a href="{{ url_for('consults.view', cid=c.id) }}">{{ c.ref_no }}</a>{% if c.is_retrospective %}<br><span class="tag t-amber">Retrospective</span>{% endif %}</td><td>{{ c.patient.full_name }}<br><small class="muted">{{ c.patient.civil_id }}</small></td><td>{{ c.reason }}</td>
 <td><span class="tag {{ 't-red' if c.urgency=='emergent' else ('t-amber' if c.urgency=='urgent' else 't-green') }}">{{ URGENCY[c.urgency] }}</span></td><td>{{ c.created_at.strftime('%d-%b-%Y') }}</td><td>{{ c.status_label }}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">{{ empty }}</td></tr>{% endfor %}</table>{% endmacro %}
 {% macro referral_table(rows, empty="Nothing here.") %}

@@ -5,9 +5,9 @@
 <table><tr><th>Reference</th><td>{{ c.ref_no }}</td><th>Date</th><td>{{ c.created_at.strftime('%d-%b-%Y') }}</td></tr>
 <tr><th>Patient</th><td>{{ c.patient.full_name }}</td><th>Civil ID</th><td>{{ c.patient.civil_id }}</td></tr>
 <tr><th>Age / sex</th><td>{{ c.patient.age or '-' }} / {{ c.patient.sex or '-' }}</td><th>Ward / bed</th><td>{{ c.ward or '-' }} / {{ c.bed or '-' }}</td></tr>
-<tr><th>Requested by</th><td>{{ c.referring_user.full_name }}, {{ c.referring_department or '' }}</td><th>Urgency</th><td>{{ URGENCY[c.urgency] }}</td></tr></table>
+<tr><th>Requested by</th><td>{{ c.referrer_name }}, {{ c.referring_department or '' }}</td><th>Urgency</th><td>{{ URGENCY[c.urgency] }}</td></tr></table>
 <h2>Reason for consult</h2><p class="t">{{ c.reason }}</p><h2>Clinical summary</h2><p class="t">{{ c.clinical_summary }}</p>
 <h2>Assessment</h2><p class="t">{{ c.assessment or '-' }}</p><h2>Recommendations</h2><p class="t">{{ c.recommendations or '-' }}</p>
 {% if c.extra_instructions %}<h2>Additional instructions (consultant)</h2><p class="t">{{ c.extra_instructions }}</p>{% endif %}
-<div class="sig"><div>1st on-call: {{ c.first_by.full_name if c.first_by else '' }}<br>{{ c.first_at.strftime('%d-%b-%Y %H:%M') if c.first_at }}</div><div>2nd on-call (approved): {{ c.second_by.full_name if c.second_by else '' }}<br>{{ c.second_at.strftime('%d-%b-%Y %H:%M') if c.second_at }}</div></div>
+<div class="sig"><div>1st on-call: {{ c.first_name_display }}<br>{{ c.first_at.strftime('%d-%b-%Y %H:%M') if c.first_at }}</div><div>2nd on-call (approved): {{ c.second_name_display }}<br>{{ c.second_at.strftime('%d-%b-%Y %H:%M') if c.second_at }}</div></div>
 <p class="foot">Confidential patient information. Printed by {{ current_user.full_name }}.</p></body></html>

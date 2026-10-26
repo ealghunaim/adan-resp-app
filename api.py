@@ -3,6 +3,7 @@
 Protected by a shared secret (env ADAN_API_KEY, sent as X-Adan-Key). If ADAN_API_KEY is unset the
 endpoint is disabled (404). Every call is audit-logged (Civil ID masked)."""
 import hmac
+import re
 
 from flask import Blueprint, jsonify, request, abort, current_app
 
@@ -18,7 +19,7 @@ def patient_records():
         abort(404)
     if not hmac.compare_digest(request.headers.get("X-Adan-Key", "").encode(), key.encode()):
         abort(403)
-    cid = (request.args.get("civil_id") or "").strip()
+    cid = re.sub(r"\D", "", request.args.get("civil_id") or "")
     p = Patient.query.filter_by(civil_id=cid).first() if cid else None
     try:
         db.session.add(AuditLog(user_id=None, action="main_app_lookup", detail=f"civil {cid[:4]}*** found={bool(p)}"))
@@ -32,9 +33,11 @@ def patient_records():
     referrals = ClinicReferral.query.filter_by(patient_id=p.id).order_by(ClinicReferral.created_at.desc()).all()
     return jsonify({
         "found": True,
+        "summary": {"records": len(consults) + len(referrals), "consults": len(consults), "referrals": len(referrals),
+                    "last": max([x.created_at for x in consults + referrals] or [None]).strftime("%Y-%m-%d") if (consults or referrals) else ""},
         "patient": {"full_name": p.full_name, "age": p.age or "", "sex": p.sex or "", "nationality": p.nationality or "",
                     "phone": p.phone or "", "mrn": p.mrn or ""},
-        "consults": [{"open": c.status != "completed", "comanage": c.comanage_kind or "", "ref_no": c.ref_no, "date": c.created_at.strftime("%Y-%m-%d"), "urgency": c.urgency, "status": c.status_label,
+        "consults": [{"retrospective": bool(c.is_retrospective), "diagnosis": c.diagnosis or "", "open": c.status != "completed", "comanage": c.comanage_kind or "", "ref_no": c.ref_no, "date": c.created_at.strftime("%Y-%m-%d"), "urgency": c.urgency, "status": c.status_label,
                       "reason": c.reason, "clinical_summary": c.clinical_summary, "ward": c.ward or "", "bed": c.bed or "",
                       "referring": c.referring_user.full_name if c.referring_user else "", "department": c.referring_department or "",
                       "assessment": c.assessment or "", "recommendations": c.recommendations or "",

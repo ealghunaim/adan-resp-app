@@ -46,9 +46,14 @@ def next_ref(prefix, model):
     return f"{prefix}-{year}-{n:04d}"
 
 
+def norm_civil(s):
+    """Civil ID as digits only, so the same patient matches in the main, Al-Adan and Transplant apps."""
+    return re.sub(r"\D", "", s or "")
+
+
 def get_or_create_patient(f):
     """Find by Civil ID, or create from the submitted form. Existing demographics are refreshed with non-empty values."""
-    cid = re.sub(r"\s+", "", f.get("civil_id", ""))
+    cid = norm_civil(f.get("civil_id", ""))
     name = f.get("patient_name", "").strip()
     if not cid or not name:
         return None
@@ -104,6 +109,21 @@ def portal_alerts(civil_id):
         return []
     try:
         r = requests.get(base + "/api/portal/patient-activity", params={"civil_id": civil_id, "exclude": "adan"},
+                         headers={"X-Portal-Key": key}, timeout=3)
+        return r.json().get("items", []) if r.status_code == 200 else []
+    except (requests.RequestException, ValueError):
+        return []
+
+
+def portal_known(civil_id, exclude="adan"):
+    """Non-clinical 'also known in ...' summary (record counts + last date) from the other apps via the main app. Best effort."""
+    import requests
+    from flask import current_app
+    base, key = current_app.config.get("MAIN_APP_URL"), current_app.config.get("PORTAL_SSO_SECRET")
+    if not (base and key and civil_id):
+        return []
+    try:
+        r = requests.get(base + "/api/portal/patient-summary", params={"civil_id": civil_id, "exclude": exclude},
                          headers={"X-Portal-Key": key}, timeout=3)
         return r.json().get("items", []) if r.status_code == 200 else []
     except (requests.RequestException, ValueError):

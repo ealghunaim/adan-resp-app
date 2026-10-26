@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% macro tbl(title, rows, total) %}<div class="card"><h2>{{ title }}</h2><table>{% for k, v in rows %}<tr><td>{{ k }}</td><td style="width:60px">{{ v }}</td><td style="width:40%"><div class="bar"><i style="width:{{ (100 * v / total) if total else 0 }}%"></i></div></td></tr>{% else %}<tr><td class="muted">No data.</td></tr>{% endfor %}</table></div>{% endmacro %}
+{% block content %}<h1>Statistics</h1>
+<form method="get" class="ff card"><div><label>From</label><input type="date" name="from" value="{{ d_from.isoformat() }}"></div><div><label>To</label><input type="date" name="to" value="{{ d_to.isoformat() }}"></div>
+<div><label>Retrospective entries</label><select name="retro"><option value="all" {{ 'selected' if retro=='all' }}>Include</option><option value="exclude" {{ 'selected' if retro=='exclude' }}>Exclude</option><option value="only" {{ 'selected' if retro=='only' }}>Only retrospective</option></select></div>
+<div><label>&nbsp;</label><button class="btn">Apply</button></div></form>
+<div class="grid g4"><div class="card stat"><b>{{ s.total }}</b><span>Consults</span></div><div class="card stat"><b>{{ s.referrals }}</b><span>Clinic referrals</span></div>
+<div class="card stat"><b>{{ s.retro }}</b><span>Retrospective</span></div><div class="card stat"><b>{{ s.open }}</b><span>Still open</span></div></div>
+<div class="card"><h2>By month</h2><table><tr><th>Month</th><th>Consults</th><th>Referrals</th><th></th></tr>
+{% for m, (c, r) in s.months %}<tr><td>{{ m }}</td><td>{{ c }}</td><td>{{ r }}</td><td style="width:50%"><div class="bar"><i style="width:{{ 100 * (c + r) / mx }}%"></i></div></td></tr>{% else %}<tr><td colspan="4" class="muted">No data.</td></tr>{% endfor %}</table></div>
+{{ tbl('By diagnosis', s.diagnosis, s.total) }}
+{% if s.dx_unset %}<p class="warnbox">{{ s.dx_unset }} consult(s) have no diagnosis. <a href="{{ url_for('consults.listing', dx='none') }}">Review them</a></p>{% endif %}
+<div class="grid g2">{{ tbl('By urgency', s.urgency, s.total) }}{{ tbl('By status', s.status, s.total) }}</div>
+{{ tbl('Outcome / disposition', s.outcomes, s.total) }}
+<p class="muted">Thoracic Surgery co-management requested: <b>{{ s.comanage }}</b> - transfer of care: <b>{{ s.transfer }}</b></p>
+<div class="grid g2">{{ tbl('Top referring physicians (consults)', s.physicians, s.total) }}{{ tbl('Top referring physicians (clinic referrals)', s.ref_physicians, s.referrals) }}</div>
+<div class="grid g2">{{ tbl('By referring service / department', s.departments, s.total) }}{{ tbl('By ward', s.wards, s.total) }}</div>{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block content %}
+<h1>{{ p.full_name }} - timeline</h1>
+<p class="muted">Civil ID {{ p.civil_id }} - {{ p.age or '-' }} / {{ p.sex or '-' }} - MRN {{ p.mrn or '-' }}
+{% if current_user.is_team %} - <a href="{{ url_for('main.patient', pid=p.id) }}">Patient page</a>{% endif %}</p>
+{% include "_alerts.html" %}
+{% if known %}<div class="card" style="border-color:#1565c0;background:#e8f1fd"><b>Also known in other apps</b>
+<ul style="margin:6px 0 0 18px">{% for k in known %}<li><b>{{ k.label }}</b>: {{ k.count }} record{{ '' if k.count == 1 else 's' }}{% if k.last %}, last {{ k.last }}{% endif %}{% if k.url %} - <a href="{{ k.url }}" target="_blank" rel="noopener">open timeline</a>{% endif %}</li>{% endfor %}</ul>
+<small class="muted">Details stay in that app; open it to see them (needs access there).</small></div>{% endif %}
+<div class="card"><h2>Al-Adan Respirology timeline</h2>
+<table><tr><th style="width:130px">Date</th><th>Event</th><th>Detail</th></tr>
+{% for e in events %}<tr><td>{{ e.dt.strftime('%d-%b-%Y') }}<br><small class="muted">{{ e.dt.strftime('%H:%M') if not e.retro else '' }}</small></td>
+<td><span class="tag {{ 't-blue' if e.kind == 'consult' else 't-purple' }}">{{ 'Consult' if e.kind == 'consult' else 'Clinic referral' }}</span>
+{% if e.retro %}<span class="tag t-amber">Retrospective</span>{% endif %} <a href="{{ e.url }}">{{ e.title }}</a></td><td>{{ e.detail }}</td></tr>
+{% else %}<tr><td colspan="3" class="muted">No events.</td></tr>{% endfor %}</table></div>{% endblock %}

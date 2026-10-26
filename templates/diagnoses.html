@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block content %}<h1>Diagnosis list</h1><p class="muted">Used by the consult diagnosis box, the past-consult form and the statistics. Hiding a diagnosis keeps old consults unchanged.</p>
+<div class="card"><form method="post" class="ff"><input type="hidden" name="action" value="add"><div><label>New diagnosis</label><input name="name" required></div><div><label>&nbsp;</label><button class="btn">Add</button></div></form></div>
+<div class="card"><table><tr><th>Diagnosis</th><th>Consults</th><th>Status</th><th></th></tr>
+{% for d in rows %}<tr><td>{{ d.name }}</td><td>{{ counts.get(d.name, 0) }}</td><td>{{ 'Active' if d.active else 'Hidden' }}</td>
+<td><form method="post"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ d.id }}"><button class="btn sm sec">{{ 'Hide' if d.active else 'Show' }}</button></form></td></tr>{% endfor %}</table></div>{% endblock %}

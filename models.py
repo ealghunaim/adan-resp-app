@@ -85,6 +85,13 @@ CONSULT_STATUS = {
     C_PENDING_FIRST: "Waiting for 1st on-call", C_PENDING_SECOND: "Waiting for 2nd on-call approval",
     C_REVISION: "Returned for revision", C_APPROVED: "Approved - ready to send", C_COMPLETED: "Sent to referring physician",
 }
+OUTCOMES = {"advice": "Advice given (managed by referring team)", "clinic": "Followed in Respirology clinic",
+            "admitted": "Admitted under Respirology", "transferred": "Transferred to Thoracic Surgery",
+            "comanaged": "Co-managed with Thoracic Surgery", "closed": "Closed / no further action"}
+OUTCOME_LABELS = dict(OUTCOMES, open="Still open")
+STARTER_DIAGNOSES = ["Pleural effusion", "Pneumothorax", "Empyema", "Pneumonia", "COPD exacerbation", "Asthma", "Interstitial lung disease",
+                     "Lung cancer / lung mass", "Pulmonary embolism", "Hemoptysis", "Bronchiectasis", "Respiratory failure",
+                     "Tuberculosis", "Sleep-disordered breathing", "Pulmonary hypertension", "Chronic cough", "Lung nodule", "Other"]
 URGENCY = {"routine": "Routine", "urgent": "Urgent", "emergent": "Emergent"}
 
 
@@ -119,6 +126,15 @@ class Consult(db.Model):
     comanage_note = db.Column(db.Text)
     comanage_by = db.Column(db.String(200))
     comanage_at = db.Column(db.DateTime)
+    # statistics + retrospective entry (2026-10-26)
+    diagnosis = db.Column(db.String(200))
+    outcome = db.Column(db.String(30))
+    is_retrospective = db.Column(db.Boolean, default=False)
+    entered_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    entered_at = db.Column(db.DateTime)
+    referring_name = db.Column(db.String(200))      # retrospective: the real referring physician (entered_by is the typist)
+    first_by_name = db.Column(db.String(200))       # retrospective: names typed in
+    second_by_name = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -126,12 +142,36 @@ class Consult(db.Model):
     referring_user = db.relationship("User", foreign_keys=[referring_user_id])
     first_by = db.relationship("User", foreign_keys=[first_by_id])
     second_by = db.relationship("User", foreign_keys=[second_by_id])
+    entered_by = db.relationship("User", foreign_keys=[entered_by_id])
     deliveries = db.relationship("Delivery", primaryjoin="and_(Delivery.kind=='consult', foreign(Delivery.record_id)==Consult.id)",
                                  order_by="Delivery.at", viewonly=True)
 
     @property
     def status_label(self):
         return CONSULT_STATUS.get(self.status, self.status)
+
+    @property
+    def referrer_name(self):
+        return self.referring_name or (self.referring_user.full_name if self.referring_user else "")
+
+    @property
+    def first_name_display(self):
+        return self.first_by_name or (self.first_by.full_name if self.first_by else "")
+
+    @property
+    def second_name_display(self):
+        return self.second_by_name or (self.second_by.full_name if self.second_by else "")
+
+    @property
+    def outcome_key(self):
+        """Recorded outcome, else derived from co-management / status."""
+        if self.outcome:
+            return self.outcome
+        if self.comanage_kind == "transfer":
+            return "transferred"
+        if self.comanage_kind == "comanage":
+            return "comanaged"
+        return "closed" if self.status == C_COMPLETED else "open"
 
 
 # ---- clinic referrals ------------------------------------------------------
@@ -192,3 +232,11 @@ class AuditLog(db.Model):
     action = db.Column(db.String(60), nullable=False)
     detail = db.Column(db.String(500))
     user = db.relationship("User")
+
+
+class AdanDiagnosis(db.Model):
+    """Admin-managed diagnosis list used by the retrospective form, the consult diagnosis box and the statistics."""
+    __tablename__ = "adan_diagnoses"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), unique=True, nullable=False)
+    active = db.Column(db.Boolean, default=True)

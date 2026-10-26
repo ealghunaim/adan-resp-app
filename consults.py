@@ -1,14 +1,14 @@
 """Respirology consults: referring physician submits -> 1st on-call drafts -> 2nd on-call approves
 (or returns / adds instructions) -> sent back by WhatsApp / email / print."""
-from datetime import datetime
+from datetime import datetime, date, time as dtime
 
 import requests
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app
 from flask_login import login_required, current_user
 
 from models import (db, Consult, Delivery, URGENCY, CONSULT_STATUS, C_PENDING_FIRST, C_PENDING_SECOND, C_REVISION,
-                    C_APPROVED, C_COMPLETED, ROLE_ADMIN)
-from core import team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link, portal_alerts
+                    C_APPROVED, C_COMPLETED, ROLE_ADMIN, OUTCOMES, AdanDiagnosis, Patient)
+from core import parse_date, team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link, portal_alerts
 
 consults_bp = Blueprint("consults", __name__, url_prefix="/consults")
 CHANNELS = ("whatsapp", "email", "print")
@@ -30,7 +30,7 @@ def message_text(c):
         parts += ["ADDITIONAL INSTRUCTIONS (consultant):", c.extra_instructions, ""]
     if c.comanage_kind:
         parts += ["THORACIC SURGERY: " + ("transfer of care" if c.comanage_kind == "transfer" else "co-management") + " requested.", ""]
-    by = c.second_by.full_name if c.second_by else ""
+    by = c.second_name_display
     parts.append(f"Approved by: {by}" if by else "")
     return "\n".join(parts).strip()
 
@@ -44,7 +44,15 @@ def listing():
     st = request.args.get("status")
     if st in CONSULT_STATUS:
         q = q.filter_by(status=st)
-    return render_template("consults.html", rows=q.order_by(Consult.created_at.desc()).limit(300).all(), st=st)
+    dx = request.args.get("dx", "")
+    if dx == "none":
+        q = q.filter(db.or_(Consult.diagnosis.is_(None), Consult.diagnosis == ""))
+    elif dx:
+        q = q.filter_by(diagnosis=dx)
+    if request.args.get("retro") == "1":
+        q = q.filter_by(is_retrospective=True)
+    return render_template("consults.html", rows=q.order_by(Consult.created_at.desc()).limit(300).all(), st=st, dx=dx,
+                           diagnoses=_dx_names())
 
 
 @consults_bp.route("/new", methods=["GET", "POST"])
@@ -78,6 +86,129 @@ def new():
     return render_template("consult_new.html", form={"civil_id": request.args.get("civil_id", "")})
 
 
+def _dx_names(extra=None):
+    names = [d.name for d in AdanDiagnosis.query.filter_by(active=True).order_by(AdanDiagnosis.name).all()]
+    # keep "Other" last
+    names = [n for n in names if n != "Other"] + (["Other"] if "Other" in names else [])
+    if extra and extra not in names:
+        names.append(extra)
+    return names
+
+
+def _apply_retro(c, f, creating):
+    """Fill a retrospective consult from the form. Returns an error message or None."""
+    d = parse_date(f.get("consult_date"))
+    if not d or d > date.today():
+        return "Enter the date the consult was requested (today or earlier)."
+    reason, summary = f.get("reason", "").strip(), f.get("clinical_summary", "").strip()
+    assessment, recs = f.get("assessment", "").strip(), f.get("recommendations", "").strip()
+    if not reason:
+        return "Reason for consult is required."
+    summary = summary or "(not recorded)"
+    d1 = parse_date(f.get("first_date")) or d
+    d2 = parse_date(f.get("second_date")) or d1
+    if d1 < d or d2 < d1 or d2 > date.today():
+        return "Response dates must be on/after the consult date, in order, and not in the future."
+    c.created_at = datetime.combine(d, dtime(9, 0))
+    c.first_at, c.second_at = datetime.combine(d1, dtime(12, 0)), datetime.combine(d2, dtime(15, 0))
+    c.referring_name = f.get("referring_name", "").strip() or None
+    c.referring_department = f.get("referring_department", "").strip() or None
+    c.consultant_in_charge = f.get("consultant_in_charge", "").strip() or None
+    c.ward, c.bed = f.get("ward", "").strip(), f.get("bed", "").strip()
+    c.urgency = f.get("urgency") if f.get("urgency") in URGENCY else "routine"
+    c.reason, c.clinical_summary = reason[:300], summary
+    c.assessment, c.recommendations = assessment or None, recs or None
+    c.extra_instructions = f.get("extra_instructions", "").strip() or None
+    c.first_by_name = f.get("first_by_name", "").strip() or None
+    c.second_by_name = f.get("second_by_name", "").strip() or None
+    dx = f.get("diagnosis", "").strip()
+    if dx == "__other__":
+        dx = f.get("diagnosis_other", "").strip()
+    c.diagnosis = dx[:200] or None
+    c.outcome = f.get("outcome") if f.get("outcome") in OUTCOMES else None
+    ck = f.get("comanage_kind")
+    c.comanage_kind = ck if ck in ("comanage", "transfer") else None
+    if c.comanage_kind:
+        c.comanage_at, c.comanage_by = c.second_at, (c.second_by_name or c.first_by_name or "")
+        c.comanage_note = "Entered retrospectively - Thoracic Surgery was not notified by this entry."
+    else:
+        c.comanage_at = c.comanage_by = c.comanage_note = None
+    c.status, c.is_retrospective = C_COMPLETED, True
+    return None
+
+
+@consults_bp.route("/retro/new", methods=["GET", "POST"])
+@team_required
+def retro_new():
+    """Enter a past consult by hand. Completed immediately; nothing is sent to anyone (no WhatsApp / email / Thoracic push)."""
+    if request.method == "POST":
+        f = request.form
+        p = get_or_create_patient(f)
+        err = "Civil ID (digits) and patient name are required." if not p else None
+        c = Consult(patient_id=p.id if p else 0, referring_user_id=current_user.id, entered_by_id=current_user.id,
+                    entered_at=datetime.utcnow())
+        if not err:
+            err = _apply_retro(c, f, True)
+        if err:
+            db.session.rollback()
+            flash(err, "error")
+            return render_template("consult_retro.html", form=f, c=None, diagnoses=_dx_names(f.get("diagnosis_other"))), 400
+        c.ref_no = next_ref("ACR", Consult)
+        c.contact_phone, c.contact_email = current_user.phone, current_user.email
+        db.session.add(c)
+        db.session.flush()
+        audit("consult_retro_created", f"{c.ref_no} civil {p.civil_id[:4]}*** dated {c.created_at.date()}")
+        db.session.commit()
+        flash(f"Past consult {c.ref_no} recorded (no notifications were sent).", "success")
+        return redirect(url_for("consults.view", cid=c.id))
+    return render_template("consult_retro.html", form={"civil_id": request.args.get("civil_id", "")}, c=None, diagnoses=_dx_names())
+
+
+@consults_bp.route("/<int:cid>/retro-edit", methods=["GET", "POST"])
+@login_required
+def retro_edit(cid):
+    c = db.session.get(Consult, cid) or abort(404)
+    if current_user.role != ROLE_ADMIN or not c.is_retrospective:
+        abort(403)
+    if request.method == "POST":
+        before = f"{c.reason}|{c.diagnosis}|{c.created_at.date()}"
+        err = _apply_retro(c, request.form, False)
+        if err:
+            db.session.rollback()
+            flash(err, "error")
+            return render_template("consult_retro.html", form=request.form, c=c, diagnoses=_dx_names(c.diagnosis)), 400
+        audit("consult_retro_edited", f"{c.ref_no} was {before}"[:480])
+        db.session.commit()
+        flash("Saved.", "success")
+        return redirect(url_for("consults.view", cid=c.id))
+    form = dict(consult_date=c.created_at.date().isoformat(), first_date=c.first_at.date().isoformat() if c.first_at else "",
+                second_date=c.second_at.date().isoformat() if c.second_at else "", referring_name=c.referring_name or "",
+                referring_department=c.referring_department or "", consultant_in_charge=c.consultant_in_charge or "",
+                ward=c.ward or "", bed=c.bed or "", urgency=c.urgency, reason=c.reason, clinical_summary=c.clinical_summary,
+                assessment=c.assessment or "", recommendations=c.recommendations or "", extra_instructions=c.extra_instructions or "",
+                first_by_name=c.first_by_name or "", second_by_name=c.second_by_name or "", diagnosis=c.diagnosis or "",
+                outcome=c.outcome or "", comanage_kind=c.comanage_kind or "", civil_id=c.patient.civil_id,
+                patient_name=c.patient.full_name, age=c.patient.age or "", sex=c.patient.sex or "",
+                nationality=c.patient.nationality or "", patient_phone=c.patient.phone or "", mrn=c.patient.mrn or "")
+    return render_template("consult_retro.html", form=form, c=c, diagnoses=_dx_names(c.diagnosis))
+
+
+@consults_bp.route("/<int:cid>/diagnosis", methods=["POST"])
+@role_required("can_respond")
+def set_diagnosis(cid):
+    c = db.session.get(Consult, cid) or abort(404)
+    dx = request.form.get("diagnosis", "").strip()
+    if dx == "__other__":
+        dx = request.form.get("diagnosis_other", "").strip()
+    if dx and dx not in _dx_names() and request.form.get("diagnosis") != "__other__":
+        abort(400)
+    c.diagnosis = dx[:200] or None
+    audit("consult_diagnosis_set", f"{c.ref_no} -> {c.diagnosis or 'cleared'}")
+    db.session.commit()
+    flash("Diagnosis saved.", "success")
+    return redirect(request.referrer if (request.referrer or "").startswith(request.host_url) else url_for("consults.view", cid=c.id))
+
+
 @consults_bp.route("/<int:cid>")
 @login_required
 def view(cid):
@@ -97,7 +228,8 @@ def view(cid):
         wa = wa_link(c.contact_phone, txt)
         mailto = mailto_link(c.contact_email, f"Respirology consult response {c.ref_no}", txt)
     alerts = portal_alerts(c.patient.civil_id) if current_user.is_team else []
-    return render_template("consult_view.html", c=c, show_response=show_response, others=others, wa=wa, mailto=mailto, alerts=alerts)
+    return render_template("consult_view.html", c=c, show_response=show_response, others=others, wa=wa, mailto=mailto, alerts=alerts,
+                           diagnoses=_dx_names(c.diagnosis) if current_user.is_team else [])
 
 
 @consults_bp.route("/<int:cid>/respond", methods=["POST"])

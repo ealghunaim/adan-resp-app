@@ -7,7 +7,8 @@ from flask import Flask, request, session, flash, jsonify, render_template, redi
 from flask_login import LoginManager, current_user, logout_user
 
 from config import Config
-from models import (db, User, ROLE_ADMIN, USER_APPROVED, ROLE_LABELS, CONSULT_STATUS, REFERRAL_STATUS, URGENCY)
+from models import (db, User, ROLE_ADMIN, USER_APPROVED, ROLE_LABELS, CONSULT_STATUS, REFERRAL_STATUS, URGENCY, OUTCOMES,
+                    OUTCOME_LABELS, AdanDiagnosis, STARTER_DIAGNOSES, Patient)
 
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
@@ -32,7 +33,8 @@ def create_app(config=None):
     from consults import consults_bp
     from referrals import referrals_bp
     from api import api_bp
-    for bp in (auth_bp, main_bp, consults_bp, referrals_bp, api_bp):
+    from stats import stats_bp
+    for bp in (auth_bp, main_bp, consults_bp, referrals_bp, api_bp, stats_bp):
         app.register_blueprint(bp)
 
     @app.before_request
@@ -65,7 +67,7 @@ def create_app(config=None):
 
     @app.context_processor
     def _ctx():
-        return dict(ROLE_LABELS=ROLE_LABELS, CONSULT_STATUS=CONSULT_STATUS, REFERRAL_STATUS=REFERRAL_STATUS, URGENCY=URGENCY,
+        return dict(ROLE_LABELS=ROLE_LABELS, CONSULT_STATUS=CONSULT_STATUS, REFERRAL_STATUS=REFERRAL_STATUS, URGENCY=URGENCY, OUTCOMES=OUTCOMES, OUTCOME_LABELS=OUTCOME_LABELS,
                     idle_seconds=int(app.config["SESSION_IDLE_MINUTES"] * 60), today=date.today(),
                     main_app_url=(app.config.get("MAIN_APP_URL") or ""))
 
@@ -81,6 +83,8 @@ def create_app(config=None):
         db.create_all()
         _ensure_columns()
         _seed(app)
+        _seed_diagnoses()
+        _normalize_civil_ids()
     return app
 
 
@@ -88,7 +92,10 @@ def _ensure_columns():
     """create_all() never alters existing tables; add columns introduced after first deploy."""
     from sqlalchemy import inspect, text
     wanted = {"consults": [("comanage_kind", "VARCHAR(20)"), ("comanage_note", "TEXT"), ("comanage_by", "VARCHAR(200)"),
-                           ("comanage_at", "TIMESTAMP")]}
+                           ("comanage_at", "TIMESTAMP"),
+                           ("diagnosis", "VARCHAR(200)"), ("outcome", "VARCHAR(30)"), ("is_retrospective", "BOOLEAN DEFAULT FALSE"),
+                           ("entered_by_id", "INTEGER"), ("entered_at", "TIMESTAMP"), ("referring_name", "VARCHAR(200)"),
+                           ("first_by_name", "VARCHAR(200)"), ("second_by_name", "VARCHAR(200)")]}
     insp = inspect(db.engine)
     for table, cols in wanted.items():
         have = {c["name"] for c in insp.get_columns(table)}
@@ -96,6 +103,25 @@ def _ensure_columns():
             if name not in have:
                 db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {ddl}'))
     db.session.commit()
+
+
+def _seed_diagnoses():
+    if AdanDiagnosis.query.count() == 0:
+        db.session.add_all(AdanDiagnosis(name=n) for n in STARTER_DIAGNOSES)
+        db.session.commit()
+
+
+def _normalize_civil_ids():
+    """Civil IDs are matched across the three apps as digits only; tidy older rows (skips any that would collide)."""
+    import re
+    changed = False
+    have = {p.civil_id for p in Patient.query.all()}
+    for p in Patient.query.all():
+        d = re.sub(r"\D", "", p.civil_id or "")
+        if d and d != p.civil_id and d not in have:
+            have.discard(p.civil_id); have.add(d); p.civil_id = d; changed = True
+    if changed:
+        db.session.commit()
 
 
 def _seed(app):
