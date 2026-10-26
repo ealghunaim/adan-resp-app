@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block content %}
+<h1>Edit account</h1>
+{% if new_password %}<div class="card" style="border:2px solid #b45309"><h2>New temporary password</h2>
+<p style="font-size:1.3em;font-family:monospace">{{ new_password }}</p>
+<p class="muted">Shown <b>once</b> - it is stored only as a one-way hash and cannot be displayed again. Give it to {{ u.full_name }} securely. They have been notified on screen that an administrator reset it.</p>
+<a class="btn" href="{{ url_for('auth.users') }}">Done</a></div>{% endif %}
+<div class="card"><form method="post" class="ff">
+<div><label>Full name</label><input name="full_name" value="{{ u.full_name }}" required></div>
+<div><label>Email (sign-in)</label><input type="email" name="email" value="{{ u.email }}" required></div>
+<div><label>Phone</label><input name="phone" value="{{ u.phone or '' }}"></div>
+<div><label>Department</label><input name="department" value="{{ u.department or '' }}"></div>
+<div><label>Role</label><select name="role">{% for k, l in ROLE_LABELS.items() %}<option value="{{ k }}" {{ 'selected' if u.role==k }}>{{ l }}</option>{% endfor %}</select></div>
+<div><label>Status</label><select name="status"><option value="approved" {{ 'selected' if u.status=='approved' }}>approved</option><option value="pending" {{ 'selected' if u.status=='pending' }}>pending</option><option value="disabled" {{ 'selected' if u.status=='disabled' }}>disabled</option></select></div>
+<div class="wide"><label>Password</label>
+<p class="muted" style="margin:2px 0">Existing passwords cannot be viewed by anyone (they are stored as one-way hashes). You can set a new one or generate one; the user is notified on screen.</p>
+<select name="password_action"><option value="">Keep current password</option><option value="generate">Generate a new temporary password</option><option value="set">Set a password I type below</option></select>
+<input type="text" name="password" placeholder="New password (8+), only for 'Set'" autocomplete="off"></div>
+<div class="wide"><button class="btn">Save changes</button> <a class="btn sec" href="{{ url_for('auth.users') }}">Cancel</a>
+<p class="muted">The user sees an "Account notice" banner listing what was changed and by whom.</p></div></form></div>{% endblock %}
