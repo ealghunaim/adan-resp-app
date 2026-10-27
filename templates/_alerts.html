@@ -3,3 +3,7 @@
 <b>&#9888; This patient is already active elsewhere</b>
 <ul style="margin:6px 0 0 18px">{% for i in alerts %}<li><b>{{ {'ltu': 'Lung Transplant Unit', 'thoracic': 'Thoracic Surgery'}.get(i.portal, i.portal) }}</b> - {{ i.label }}: {{ i.status }}{% if i.detail %} <small>({{ i.detail }})</small>{% endif %}</li>{% endfor %}</ul></div>
 {% endif %}
+{% if known %}
+<div style="border:1px solid #1565c0;background:#e8f1fd;border-radius:8px;padding:10px 14px;margin:10px 0"><b>Also known in other apps (same Civil ID)</b>
+<ul style="margin:6px 0 0 18px">{% for k in known %}<li><b>{{ k.label }}</b>: {{ k.count }} record{{ '' if k.count == 1 else 's' }}{% if k.last %}, last {{ k.last }}{% endif %}{% if k.url %} - <a href="{{ k.url }}" target="_blank" rel="noopener">open timeline</a>{% endif %}</li>{% endfor %}</ul></div>
+{% endif %}

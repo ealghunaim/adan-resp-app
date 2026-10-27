@@ -41,7 +41,7 @@ def patients():
 @team_required
 def patient(pid):
     p = db.session.get(Patient, pid) or abort(404)
-    return render_template("patient_detail.html", p=p, alerts=portal_alerts(p.civil_id),
+    return render_template("patient_detail.html", p=p, alerts=portal_alerts(p.civil_id), known=portal_known(p.civil_id),
                            consults=Consult.query.filter_by(patient_id=p.id).order_by(Consult.created_at.desc()).all(),
                            referrals=ClinicReferral.query.filter_by(patient_id=p.id).order_by(ClinicReferral.created_at.desc()).all())
 

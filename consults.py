@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 
 from models import (db, Consult, Delivery, URGENCY, CONSULT_STATUS, C_PENDING_FIRST, C_PENDING_SECOND, C_REVISION,
                     C_APPROVED, C_COMPLETED, ROLE_ADMIN, OUTCOMES, AdanDiagnosis, Patient)
-from core import parse_date, team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link, portal_alerts
+from core import parse_date, team_required, role_required, audit, next_ref, get_or_create_patient, wa_link, mailto_link, portal_alerts, portal_known
 
 consults_bp = Blueprint("consults", __name__, url_prefix="/consults")
 CHANNELS = ("whatsapp", "email", "print")
@@ -228,7 +228,8 @@ def view(cid):
         wa = wa_link(c.contact_phone, txt)
         mailto = mailto_link(c.contact_email, f"Respirology consult response {c.ref_no}", txt)
     alerts = portal_alerts(c.patient.civil_id) if current_user.is_team else []
-    return render_template("consult_view.html", c=c, show_response=show_response, others=others, wa=wa, mailto=mailto, alerts=alerts,
+    known = portal_known(c.patient.civil_id) if current_user.is_team else []
+    return render_template("consult_view.html", c=c, show_response=show_response, others=others, wa=wa, mailto=mailto, alerts=alerts, known=known,
                            diagnoses=_dx_names(c.diagnosis) if current_user.is_team else [])
 
 
