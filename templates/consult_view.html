@@ -18,7 +18,8 @@
 <div class="card"><h2>Respirology response</h2>
 <h3>Assessment</h3><p style="white-space:pre-wrap">{{ c.assessment }}</p><h3>Recommendations</h3><p style="white-space:pre-wrap">{{ c.recommendations }}</p>
 {% if c.extra_instructions %}<h3>Additional instructions (consultant)</h3><p style="white-space:pre-wrap">{{ c.extra_instructions }}</p>{% endif %}
-<p class="muted">1st on-call: {{ c.first_name_display or '-' }}{% if c.second_name_display %} - approved by {{ c.second_name_display }}{% endif %}</p></div>{% endif %}
+<p class="muted">1st on-call: {{ c.first_name_display or '-' }}{% if c.second_name_display %} - approved by {{ c.second_name_display }}{% endif %}</p>
+{% if c.status in ('approved','completed') %}<p class="noprint"><a class="btn" href="{{ url_for('consults.print_view', cid=c.id) }}" target="_blank">&#128424; Print consult response</a></p>{% endif %}</div>{% endif %}
 
 {% if current_user.is_team %}
 {% if c.status in ('pending_first','needs_revision') and current_user.can_respond %}

@@ -290,6 +290,14 @@ check("thoracic view-only can see stats + timeline + open retro form", c6.get("/
       and c6.get("/consults/retro/new", follow_redirects=False).status_code == 200)
 
 
+# ---- users grouped by team + prominent print button (2026-10-27)
+pg = admin.get("/users").data
+check("users grouped by team", b"Respirology - 1st on-call" in pg and b"Thoracic Surgery team" in pg and b"Referring physicians" in pg)
+with app.app_context(): done = Consult.query.filter_by(status="completed").first()
+if done:
+    check("print button on completed consult", b"Print consult response" in first.get(f"/consults/{done.id}").data)
+    check("print page opens", b"Respirology Consult Response" in first.get(f"/consults/{done.id}/print").data)
+
 print("\nFAILS:", len(fails))
 for f in fails: print(" -", f)
 sys.exit(1 if fails else 0)
